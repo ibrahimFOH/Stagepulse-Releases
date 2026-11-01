@@ -25,3 +25,8 @@ Bu uç nokta yalnızca herkese açık GitHub Release varlıklarını okur. Lisan
 - SHA-256 özetleri her dosya için CI tarafından hesaplanır.
 - Android paketi kalıcı Stagepulse imzalama anahtarıyla imzalanmalıdır.
 - İmzalama anahtarı veya Supabase servis anahtarı bu depoya kesinlikle eklenmez.
+
+
+## Otomatik doğrulama
+
+`.github/workflows/test-update-manifest.yml`, Supabase sürüm bildirim uç noktasını kimlik doğrulaması olmadan çağırır; yayın yokken boş sürüm yanıtını, yayın olduğunda Windows/Android indirme adresleriyle SHA-256 alanlarını kontrol eder. Aynı akış HTTP yöntem ve CORS davranışını da denetler.
