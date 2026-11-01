@@ -4,12 +4,13 @@ Bu depo, Stagepulse Ses Merkezi'nin herkese açık kurulum paketlerini ve kararl
 
 ## Dağıtım dosyaları
 
-Her kararlı GitHub Release şu dosyaları içerecek:
+Her kararlı GitHub Release şu dosyaları içerir:
 
 - `Stagepulse-Ses-Merkezi-Windows-<sürüm>.exe`: Windows kurulum paketi
 - `Stagepulse-Ses-Merkezi-Windows-<sürüm>.exe.sha256`: Windows SHA-256 özeti
 - `Stagepulse-Ses-Merkezi-Android-<sürüm>.apk`: İmzalı Android APK
 - `Stagepulse-Ses-Merkezi-Android-<sürüm>.apk.sha256`: Android SHA-256 özeti
+- `latest.json`: Sürüm, platform indirme adresleri ve iki SHA-256 değerini içeren doğrulanmış ortak bildirim
 
 ## Güncelleme bildirimi
 
@@ -17,7 +18,7 @@ Uygulamalar sürüm ve dosya bütünlüğü bilgisini Stagepulse Supabase Edge F
 
 `https://itasctyjzyewcykozuex.supabase.co/functions/v1/ses-merkezi-updates`
 
-Bu uç nokta yalnızca herkese açık GitHub Release varlıklarını okur. Lisans, kullanıcı veya yönetim verisi içermez.
+Bu uç nokta GitHub Release içindeki sabit `latest.json` dosyasını okur ve sürüm, indirme alan adı, dosya adı ve SHA-256 alanlarını doğrular. GitHub API kotasına bağlı değildir. Lisans, kullanıcı veya yönetim verisi içermez.
 
 ## Güvenlik
 
