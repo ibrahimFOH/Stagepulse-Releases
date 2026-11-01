@@ -1,0 +1,77 @@
+name: Ses Merkezi güncelleme servisini dağıt
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: "Güncelleme fonksiyonu kaynak dalı veya commit"
+        required: true
+        default: "integration/3.7.0-shared-core-demo"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Supabase Edge Function dağıtımı
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Özel kaynak kodunu salt-okunur token ile al
+        uses: actions/checkout@v4
+        with:
+          repository: ibrahimFOH/Stagepulse-Ses-Merkezi
+          ref: ${{ inputs.source_ref }}
+          token: ${{ secrets.SOURCE_REPO_READ_TOKEN }}
+          path: source
+          persist-credentials: false
+
+      - name: Erişim ve fonksiyon dosyasını doğrula
+        shell: bash
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "$SUPABASE_ACCESS_TOKEN" || { echo "::error::SUPABASE_ACCESS_TOKEN secret eksik."; exit 1; }
+          test -s source/windows/supabase/functions/ses-merkezi-updates/index.ts
+
+      - name: Supabase CLI kur
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Yalnızca güncelleme fonksiyonunu dağıt
+        shell: bash
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          supabase functions deploy ses-merkezi-updates \
+            --project-ref itasctyjzyewcykozuex \
+            --no-verify-jwt \
+            --use-api
+
+      - name: Genel erişim ve HTTP davranışını denetle
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL="https://itasctyjzyewcykozuex.supabase.co/functions/v1/ses-merkezi-updates"
+          curl --retry 3 --retry-all-errors --retry-delay 2 --fail --silent --show-error \
+            --header "Accept: application/json" "$URL" -o manifest.json
+          python3 - <<'PY'
+          import json, re
+          from pathlib import Path
+          data = json.loads(Path("manifest.json").read_text(encoding="utf-8"))
+          assert data.get("ok") is True, data
+          assert isinstance(data.get("published"), bool), data
+          if data["published"]:
+              assert re.fullmatch(r"\d+\.\d+\.\d+", data.get("version", "")), data
+              assert isinstance(data.get("windows"), dict) and isinstance(data.get("android"), dict), data
+              for item in (data["windows"], data["android"]):
+                  assert item.get("url", "").startswith("https://"), item
+                  assert re.fullmatch(r"[a-f0-9]{64}", item.get("sha256", "")), item
+          else:
+              assert data.get("message"), data
+          print("SUPABASE_UPDATE_ENDPOINT_OK")
+          PY
