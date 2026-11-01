@@ -1,0 +1,276 @@
+name: Stagepulse Ses Merkezi kararlı sürümünü oluştur ve yayımla
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: "Sürüm numarası, ör. 3.7.1"
+        required: true
+        default: "3.7.1"
+        type: string
+      source_ref:
+        description: "Özel kaynak deposunda derlenecek dal veya commit"
+        required: true
+        default: "integration/3.7.0-shared-core-demo"
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ses-merkezi-release-${{ inputs.release_version }}
+  cancel-in-progress: false
+
+jobs:
+  build-windows:
+    name: Windows kurulum EXE ve testleri
+    runs-on: windows-latest
+    timeout-minutes: 60
+    env:
+      RELEASE_VERSION: ${{ inputs.release_version }}
+    steps:
+      - name: Özel kaynak kodunu salt-okunur token ile al
+        uses: actions/checkout@v4
+        with:
+          repository: ibrahimFOH/Stagepulse-Ses-Merkezi
+          ref: ${{ inputs.source_ref }}
+          token: ${{ secrets.SOURCE_REPO_READ_TOKEN }}
+          path: source
+          persist-credentials: false
+
+      - name: Sürüm numarasını ve üçlü sürüm eşitliğini denetle
+        shell: pwsh
+        run: |
+          $version = $env:RELEASE_VERSION
+          if ($version -notmatch '^\d+\.\d+\.\d+$') { throw "Geçersiz sürüm numarası: $version" }
+          $merkez = [regex]::Match((Get-Content source/windows/Merkez.py -Raw), 'APP_VERSION\s*=\s*"([^"]+)"')
+          $installer = [regex]::Match((Get-Content source/windows/EXE_OLUSTUR.ps1 -Raw), '\$version\s*=\s*''([^'']+)''')
+          $android = [regex]::Match((Get-Content source/android/app/build.gradle -Raw), "versionName\s+'([^']+)'")
+          if (-not $merkez.Success -or -not $installer.Success -or -not $android.Success) { throw "Sürüm alanları kaynakta bulunamadı." }
+          if ($merkez.Groups[1].Value -ne $version -or $installer.Groups[1].Value -ne $version -or $android.Groups[1].Value -ne $version) {
+            throw "Sürüm uyuşmazlığı: istenen=$version, Windows=$($merkez.Groups[1].Value), kurucu=$($installer.Groups[1].Value), Android=$($android.Groups[1].Value)"
+          }
+          "RELEASE_VERSION=$version" >> $env:GITHUB_ENV
+
+      - name: Python 3.11 x64 kur
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          architecture: x64
+
+      - name: Windows testlerini çalıştır
+        shell: pwsh
+        working-directory: source/windows
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pytest tests -q
+
+      - name: Windows kurulum EXE dosyasını oluştur
+        shell: pwsh
+        working-directory: source/windows
+        run: ./EXE_OLUSTUR.ps1
+
+      - name: Dağıtım dosyasını adlandır ve SHA-256 oluştur
+        shell: pwsh
+        run: |
+          $files = @(Get-ChildItem -Path source/windows/dist -Filter "*.exe" -File)
+          if ($files.Count -ne 1) { throw "Windows dist klasöründe tam olarak bir kurulum EXE'si olmalı." }
+          New-Item -ItemType Directory -Force -Path release-assets | Out-Null
+          $name = "Stagepulse-Ses-Merkezi-Windows-$env:RELEASE_VERSION.exe"
+          $target = Join-Path "release-assets" $name
+          Copy-Item -LiteralPath $files[0].FullName -Destination $target -Force
+          $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $target).Hash.ToLowerInvariant()
+          Set-Content -LiteralPath "$target.sha256" -Value "$hash  $name" -Encoding ascii -NoNewline
+          if ((Get-Item -LiteralPath $target).Length -lt 1000000) { throw "Windows kurulum paketi beklenenden küçük." }
+          Write-Host "Windows SHA-256: $hash"
+
+      - name: Windows dağıtım dosyalarını sakla
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-windows
+          path: release-assets/*
+          if-no-files-found: error
+          retention-days: 7
+
+  build-android:
+    name: Kalıcı anahtarla imzalı Android APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    env:
+      RELEASE_VERSION: ${{ inputs.release_version }}
+      ANDROID_SIGNING_KEYSTORE_BASE64: ${{ secrets.ANDROID_SIGNING_KEYSTORE_BASE64 }}
+      ANDROID_SIGNING_STORE_PASSWORD: ${{ secrets.ANDROID_SIGNING_STORE_PASSWORD }}
+      ANDROID_SIGNING_KEY_ALIAS: ${{ secrets.ANDROID_SIGNING_KEY_ALIAS }}
+      ANDROID_SIGNING_KEY_PASSWORD: ${{ secrets.ANDROID_SIGNING_KEY_PASSWORD }}
+    steps:
+      - name: Özel kaynak kodunu salt-okunur token ile al
+        uses: actions/checkout@v4
+        with:
+          repository: ibrahimFOH/Stagepulse-Ses-Merkezi
+          ref: ${{ inputs.source_ref }}
+          token: ${{ secrets.SOURCE_REPO_READ_TOKEN }}
+          path: source
+          persist-credentials: false
+
+      - name: Gerekli kalıcı imzalama secrets değerlerini doğrula
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in ANDROID_SIGNING_KEYSTORE_BASE64 ANDROID_SIGNING_STORE_PASSWORD ANDROID_SIGNING_KEY_ALIAS ANDROID_SIGNING_KEY_PASSWORD; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::Eksik Actions secret: $name"
+              exit 1
+            fi
+          done
+
+      - name: Android sürüm ve kaynak varlıklarını doğrula
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os, re
+          from pathlib import Path
+          version = os.environ["RELEASE_VERSION"]
+          match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", version)
+          if not match:
+              raise SystemExit(f"Geçersiz sürüm: {version}")
+          expected = int(match.group(1)) * 10000 + int(match.group(2)) * 100 + int(match.group(3))
+          gradle = Path("source/android/app/build.gradle").read_text(encoding="utf-8")
+          name = re.search(r"\bversionName\s+'([^']+)'", gradle)
+          code = re.search(r"\bversionCode\s+(\d+)", gradle)
+          if not name or not code or name.group(1) != version or int(code.group(1)) != expected:
+              raise SystemExit(f"Android Gradle sürümü beklenenden farklı. Beklenen {version}/{expected}.")
+          PY
+          python3 source/android/scripts/verify_assets.py
+
+      - name: JavaScript ve çevrimdışı lisans testlerini çalıştır
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Android JavaScript doğrulaması
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in             source/android/app/src/main/assets/ui/app.js             source/android/app/src/main/assets/ui/rta_math.js             source/android/app/src/main/assets/ui/acoustic_math.js             source/android/app/src/main/assets/ui/feature_access.js             source/android/app/src/main/assets/ui/first_party_tools.js             source/android/app/src/main/assets/ui/android_bridge.js             source/android/app/src/main/assets/ui/araclar/Frekans_Bulucu/freq-finder.js; do
+            node --check "$file"
+          done
+          node source/android/scripts/test_offline_bridge.js
+
+      - name: Java 17 kur
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Android SDK paketlerini kur
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          SDKMANAGER="$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager 2>/dev/null | sort -V | tail -n 1)"
+          test -n "$SDKMANAGER"
+          yes | "$SDKMANAGER" --sdk_root="$SDK_ROOT" --licenses >/dev/null || true
+          "$SDKMANAGER" --sdk_root="$SDK_ROOT" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Kalıcı Android imza anahtarını hazırla
+        shell: bash
+        run: |
+          set -euo pipefail
+          KEYSTORE="$RUNNER_TEMP/stagepulse-release.jks"
+          printf '%s' "$ANDROID_SIGNING_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE"
+          test -s "$KEYSTORE"
+          {
+            echo "ANDROID_KEYSTORE_PATH=$KEYSTORE"
+            echo "ANDROID_KEYSTORE_PASSWORD=$ANDROID_SIGNING_STORE_PASSWORD"
+            echo "ANDROID_KEY_ALIAS=$ANDROID_SIGNING_KEY_ALIAS"
+            echo "ANDROID_KEY_PASSWORD=$ANDROID_SIGNING_KEY_PASSWORD"
+          } >> "$GITHUB_ENV"
+
+      - name: Gradle 8.9 kur
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+
+      - name: İmzalı Android Release APK derle
+        run: gradle -p source/android --no-daemon clean assembleRelease --stacktrace
+
+      - name: İmza, sürüm, hizalama ve SHA-256 doğrula
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="source/android/app/build/outputs/apk/release/app-release.apk"
+          test -s "$APK"
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
+          AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)"
+          ZIPALIGN="$(find "$ANDROID_HOME/build-tools" -type f -name zipalign | sort -V | tail -n 1)"
+          test -n "$APKSIGNER" && test -n "$AAPT" && test -n "$ZIPALIGN"
+          "$APKSIGNER" verify --verbose --print-certs "$APK"
+          "$ZIPALIGN" -c -v 4 "$APK"
+          BADGING="$("$AAPT" dump badging "$APK")"
+          EXPECTED_CODE="$(python3 -c 'import os,re; m=re.fullmatch(r"(\d+)\.(\d+)\.(\d+)",os.environ["RELEASE_VERSION"]); print(int(m.group(1))*10000+int(m.group(2))*100+int(m.group(3)))')"
+          grep -q "versionCode='$EXPECTED_CODE'" <<< "$BADGING"
+          grep -q "versionName='$RELEASE_VERSION'" <<< "$BADGING"
+          grep -q "package: name='com.stagepulse.sesmerkezi'" <<< "$BADGING"
+          mkdir -p release-assets
+          NAME="Stagepulse-Ses-Merkezi-Android-$RELEASE_VERSION.apk"
+          cp "$APK" "release-assets/$NAME"
+          HASH="$(sha256sum "release-assets/$NAME" | awk '{print $1}')"
+          printf '%s  %s\n' "$HASH" "$NAME" > "release-assets/$NAME.sha256"
+          echo "Android SHA-256: $HASH"
+
+      - name: Android dağıtım dosyalarını sakla
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-android
+          path: release-assets/*
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: İki platformu birlikte herkese açık yayımla
+    needs: [build-windows, build-android]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Windows dağıtım dosyalarını al
+        uses: actions/download-artifact@v4
+        with:
+          name: release-windows
+          path: release-assets
+
+      - name: Android dağıtım dosyalarını al
+        uses: actions/download-artifact@v4
+        with:
+          name: release-android
+          path: release-assets
+
+      - name: Her iki paketin SHA-256 özetini yeniden doğrula
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ inputs.release_version }}
+        run: |
+          set -euo pipefail
+          for platform in Windows Android; do
+            ext="exe"
+            [ "$platform" = "Android" ] && ext="apk"
+            file="Stagepulse-Ses-Merkezi-$platform-$RELEASE_VERSION.$ext"
+            (cd release-assets && sha256sum -c "$file.sha256")
+          done
+
+      - name: Aynı sürümü GitHub Release olarak yayımla
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64
+        with:
+          tag_name: v${{ inputs.release_version }}
+          target_commitish: main
+          name: Stagepulse Ses Merkezi ${{ inputs.release_version }}
+          body: |
+            Stagepulse Ses Merkezi ${{ inputs.release_version }} kararlı sürümü.
+
+            Windows kurulum paketi ve kalıcı sertifika ile imzalanmış Android APK birlikte yayımlandı.
+            Her dosyanın SHA-256 özeti yanında bulunur. Uygulama içi güncelleme bildirimi Supabase üzerinden sunulur.
+          draft: false
+          prerelease: false
+          make_latest: true
+          overwrite_files: true
+          fail_on_unmatched_files: true
+          files: release-assets/*
