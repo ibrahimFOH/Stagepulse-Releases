@@ -17,6 +17,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      - name: Depo kaynak kodunu al
+        uses: actions/checkout@v4
+
       - name: Yayın iş akışlarının YAML sözdizimini doğrula
         shell: bash
         run: |
