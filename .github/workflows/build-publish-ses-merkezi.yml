@@ -257,6 +257,61 @@ jobs:
             (cd release-assets && sha256sum -c "$file.sha256")
           done
 
+      - name: İki platformun doğrulanmış latest.json bildirimini oluştur
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ inputs.release_version }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, json, os, re
+          from pathlib import Path
+          version = os.environ["RELEASE_VERSION"]
+          match = re.fullmatch(r"(\\d+)\\.(\\d+)\\.(\\d+)", version)
+          if not match:
+              raise SystemExit("Geçersiz sürüm numarası.")
+          version_code = int(match.group(1)) * 10000 + int(match.group(2)) * 100 + int(match.group(3))
+          tag = "v" + version
+          base = f"https://github.com/ibrahimFOH/Stagepulse-Releases/releases/download/{tag}"
+          items = {}
+          for platform, extension in (("Windows", "exe"), ("Android", "apk")):
+              name = f"Stagepulse-Ses-Merkezi-{platform}-{version}.{extension}"
+              package = Path("release-assets") / name
+              checksum = Path(str(package) + ".sha256")
+              if not package.is_file() or not checksum.is_file():
+                  raise SystemExit(f"{platform} sürüm dosyası veya SHA-256 dosyası eksik.")
+              expected = checksum.read_text(encoding="ascii").strip().split()[0].lower()
+              actual = hashlib.sha256(package.read_bytes()).hexdigest()
+              if not re.fullmatch(r"[a-f0-9]{64}", expected) or expected != actual:
+                  raise SystemExit(f"{platform} SHA-256 doğrulaması başarısız.")
+              items[platform.lower()] = {
+                  "url": f"{base}/{name}",
+                  "sha256": actual,
+                  "filename": name,
+              }
+          manifest = {
+              "ok": True,
+              "published": True,
+              "version": version,
+              "versionName": version,
+              "versionCode": version_code,
+              "windows": items["windows"],
+              "android": items["android"],
+              "url": items["windows"]["url"],
+              "sha256": items["windows"]["sha256"],
+              "filename": items["windows"]["filename"],
+              "apkUrl": items["android"]["url"],
+              "apkSha256": items["android"]["sha256"],
+              "notes": f"Stagepulse Ses Merkezi {version} kararlı sürümü.",
+              "release_url": f"https://github.com/ibrahimFOH/Stagepulse-Releases/releases/tag/{tag}",
+          }
+          Path("latest.json").write_text(
+              json.dumps(manifest, ensure_ascii=False, indent=2) + "\\n",
+              encoding="utf-8",
+          )
+          print("LATEST_MANIFEST_OK", version, version_code)
+          PY
+
       - name: Aynı sürümü GitHub Release olarak yayımla
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64
         with:
@@ -273,4 +328,6 @@ jobs:
           make_latest: true
           overwrite_files: true
           fail_on_unmatched_files: true
-          files: release-assets/*
+          files: |
+            release-assets/*
+            latest.json
