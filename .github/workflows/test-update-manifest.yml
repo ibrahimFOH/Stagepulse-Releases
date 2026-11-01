@@ -1,0 +1,62 @@
+name: Güncelleme servisi canlı testi
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "README.md"
+      - ".github/workflows/test-update-manifest.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  update-manifest:
+    name: Herkese açık manifest ve HTTP davranışı
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Güncelleme manifestini kimlik doğrulama olmadan çağır
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL="https://itasctyjzyewcykozuex.supabase.co/functions/v1/ses-merkezi-updates"
+          curl --retry 3 --retry-all-errors --retry-delay 2 --fail --silent --show-error \
+            --header "Accept: application/json" "$URL" -o manifest.json
+          python3 - <<'PY'
+          import json, re
+          from pathlib import Path
+          data = json.loads(Path("manifest.json").read_text(encoding="utf-8"))
+          assert data.get("ok") is True, data
+          assert isinstance(data.get("published"), bool), data
+          if data["published"]:
+              version = data.get("version", "")
+              assert re.fullmatch(r"\d+\.\d+\.\d+", version), data
+              assert data.get("versionName") == version, data
+              assert isinstance(data.get("versionCode"), int) and data["versionCode"] > 0, data
+              windows = data.get("windows")
+              android = data.get("android")
+              assert isinstance(windows, dict) and isinstance(android, dict), data
+              for platform in (windows, android):
+                  assert platform.get("url", "").startswith("https://"), platform
+                  assert re.fullmatch(r"[a-f0-9]{64}", platform.get("sha256", "")), platform
+              assert data.get("url") == windows["url"], data
+              assert data.get("sha256") == windows["sha256"], data
+              assert data.get("apkUrl") == android["url"], data
+              assert data.get("apkSha256") == android["sha256"], data
+          else:
+              assert isinstance(data.get("message"), str) and data["message"], data
+          print("MANIFEST_OK", data.get("version", "henüz yayın yok"))
+          PY
+
+      - name: CORS ve HTTP yöntem sınırlarını denetle
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL="https://itasctyjzyewcykozuex.supabase.co/functions/v1/ses-merkezi-updates"
+          curl --silent --show-error --output /dev/null --write-out "%{http_code}" \
+            --request OPTIONS "$URL" | grep -qx "200"
+          STATUS="$(curl --silent --show-error --output /dev/null --write-out "%{http_code}" \
+            --request POST "$URL")"
+          test "$STATUS" = "405"
