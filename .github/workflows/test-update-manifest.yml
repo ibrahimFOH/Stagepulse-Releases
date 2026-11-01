@@ -5,7 +5,7 @@ on:
     branches: [main]
     paths:
       - "README.md"
-      - ".github/workflows/test-update-manifest.yml"
+      - ".github/workflows/**"
   workflow_dispatch:
 
 permissions:
@@ -17,6 +17,22 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      - name: Yayın iş akışlarının YAML sözdizimini doğrula
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet pyyaml
+          python3 - <<'PY'
+          from pathlib import Path
+          import yaml
+          paths = sorted(Path(".github/workflows").glob("*.yml"))
+          if not paths:
+              raise SystemExit("İş akışı dosyası bulunamadı.")
+          for path in paths:
+              yaml.safe_load(path.read_text(encoding="utf-8"))
+              print("YAML_OK", path)
+          PY
+
       - name: Güncelleme manifestini kimlik doğrulama olmadan çağır
         shell: bash
         run: |
