@@ -75,15 +75,15 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Android SDK hazırla
-        uses: android-actions/setup-android@v3
-
-      - name: Android 35 ve Build Tools kur
+      - name: Android SDK paketlerini kur
         shell: bash
         run: |
           set -euo pipefail
-          yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+          SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          SDKMANAGER="$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager 2>/dev/null | sort -V | tail -n 1)"
+          test -n "$SDKMANAGER"
+          yes | "$SDKMANAGER" --sdk_root="$SDK_ROOT" --licenses >/dev/null || true
+          "$SDKMANAGER" --sdk_root="$SDK_ROOT" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
       - name: Kalıcı imza anahtarını hazırla
         shell: bash
