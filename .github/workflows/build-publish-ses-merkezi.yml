@@ -66,6 +66,13 @@ jobs:
           python-version: "3.11"
           architecture: x64
 
+      - name: Windows Python kaynak ve bağımlılık güvenlik kontrolleri
+        shell: pwsh
+        run: |
+          python -m compileall -q source/windows
+          python -m pip install --upgrade pip pip-audit
+          pip-audit -r source/windows/requirements.txt
+
       - name: Windows kurulum EXE dosyasını oluştur
         shell: pwsh
         working-directory: source/windows
@@ -152,14 +159,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for file in \
-            source/android/app/src/main/assets/ui/app.js \
-            source/android/app/src/main/assets/ui/rta_math.js \
-            source/android/app/src/main/assets/ui/acoustic_math.js \
-            source/android/app/src/main/assets/ui/araclar/Frekans_Bulucu/freq-finder.js; do
+          while IFS= read -r -d "" file; do
             test -s "$file"
             node --check "$file"
-          done
+          done < <(find source/android/app/src/main/assets/ui -type f -name "*.js" -print0)
 
       - name: Java 17 kur
         uses: actions/setup-java@v5
@@ -197,7 +200,7 @@ jobs:
           gradle-version: "8.9"
 
       - name: İmzalı Android Release APK derle
-        run: gradle -p source/android --no-daemon clean assembleRelease --stacktrace
+        run: gradle -p source/android --no-daemon clean testDebugUnitTest assembleRelease --stacktrace
 
       - name: İmza, sürüm, hizalama ve SHA-256 doğrula
         shell: bash
