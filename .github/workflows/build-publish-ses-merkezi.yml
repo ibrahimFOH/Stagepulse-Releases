@@ -213,7 +213,7 @@ jobs:
           APKSIGNER_REPORT="$RUNNER_TEMP/stagepulse-apksigner-report.txt"
           keytool -exportcert -keystore "$ANDROID_KEYSTORE_PATH" -storepass "$ANDROID_KEYSTORE_PASSWORD" -alias "$ANDROID_KEY_ALIAS" -file "$CERT_FILE" >/dev/null
           EXPECTED_CERT="$(sha256sum "$CERT_FILE" | awk '{print tolower($1)}')"
-          "$APKSIGNER" verify --print-certs "$APK" > "$APKSIGNER_REPORT"
+          "$APKSIGNER" verify --verbose --print-certs "$APK" > "$APKSIGNER_REPORT"
           ACTUAL_CERT="$(python3 - "$APKSIGNER_REPORT" <<'PY'
           import re, sys
           from pathlib import Path
