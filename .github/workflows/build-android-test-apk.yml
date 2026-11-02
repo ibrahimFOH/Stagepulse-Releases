@@ -263,7 +263,7 @@ jobs:
             import json, sys
             from pathlib import Path
             data = {"source_sha": sys.argv[1], "version": sys.argv[2], "version_code": int(sys.argv[3])}
-            Path(".github/test-apk-source.json").write_text(json.dumps(data, indent=2) + "\\n", encoding="utf-8")
+            Path(".github/test-apk-source.json").write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
             PY
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
