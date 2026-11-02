@@ -1,0 +1,141 @@
+name: Ses Merkezi Android test APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/build-android-test-apk.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ses-merkezi-android-test-apk
+  cancel-in-progress: false
+
+jobs:
+  build-test-apk:
+    name: Android kaynak, test, imza ve APK doğrulaması
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      RELEASE_VERSION: "3.7.3"
+      ANDROID_SIGNING_KEYSTORE_BASE64: ${{ secrets.ANDROID_SIGNING_KEYSTORE_BASE64 }}
+      ANDROID_SIGNING_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_SIGNING_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_SIGNING_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Özel Ses Merkezi kaynak kodunu al
+        uses: actions/checkout@v4
+        with:
+          repository: ibrahimFOH/Stagepulse-Ses-Merkezi
+          ref: main
+          token: ${{ secrets.SOURCE_REPO_READ_TOKEN }}
+          path: source
+          persist-credentials: false
+
+      - name: Python 3.12 kur
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: APK varlıklarını ve eğitim dosyalarını doğrula
+        run: python source/android/scripts/verify_assets.py
+
+      - name: Node.js 22 kur ve tüm Android JavaScript dosyalarını denetle
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: JavaScript sözdizimini doğrula
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r -d "" file; do
+            test -s "$file"
+            node --check "$file"
+          done < <(find source/android/app/src/main/assets/ui -type f -name "*.js" -print0)
+
+      - name: Kalıcı Android imza sırlarını doğrula
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in ANDROID_SIGNING_KEYSTORE_BASE64 ANDROID_SIGNING_STORE_PASSWORD ANDROID_SIGNING_KEY_ALIAS ANDROID_SIGNING_KEY_PASSWORD; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::Eksik Actions secret: $name"
+              exit 1
+            fi
+          done
+
+      - name: Java 17 kur
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Android SDK hazırla
+        uses: android-actions/setup-android@v3
+
+      - name: Android 35 ve Build Tools kur
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Kalıcı imza anahtarını hazırla
+        shell: bash
+        run: |
+          set -euo pipefail
+          KEYSTORE="$RUNNER_TEMP/stagepulse-release.jks"
+          printf '%s' "$ANDROID_SIGNING_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE"
+          test -s "$KEYSTORE"
+          {
+            echo "ANDROID_KEYSTORE_PATH=$KEYSTORE"
+            echo "ANDROID_KEYSTORE_PASSWORD=$ANDROID_SIGNING_STORE_PASSWORD"
+            echo "ANDROID_KEY_ALIAS=$ANDROID_SIGNING_KEY_ALIAS"
+            echo "ANDROID_KEY_PASSWORD=$ANDROID_SIGNING_KEY_PASSWORD"
+          } >> "$GITHUB_ENV"
+
+      - name: Gradle 8.9 kur
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+
+      - name: Android birim testlerini ve imzalı APK derlemesini çalıştır
+        run: gradle -p source/android --no-daemon clean testDebugUnitTest assembleRelease --stacktrace
+
+      - name: APK sürümünü, paket adını, imzasını ve hizalamasını doğrula
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="source/android/app/build/outputs/apk/release/app-release.apk"
+          test -s "$APK"
+          APKSIGNER="$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
+          ZIPALIGN="$ANDROID_HOME/build-tools/35.0.0/zipalign"
+          "$APKSIGNER" verify --verbose --print-certs "$APK"
+          "$ZIPALIGN" -c -v 4 "$APK"
+          BADGING="$("$AAPT" dump badging "$APK")"
+          grep -q "package: name='com.stagepulse.sesmerkezi' versionCode='30703' versionName='3.7.3'" <<< "$BADGING"
+          mkdir -p release-assets
+          cp "$APK" "release-assets/Stagepulse-Ses-Merkezi-Android-3.7.3-TEST.apk"
+          sha256sum release-assets/*.apk > release-assets/Stagepulse-Ses-Merkezi-Android-3.7.3-TEST.apk.sha256
+          sha256sum -c release-assets/Stagepulse-Ses-Merkezi-Android-3.7.3-TEST.apk.sha256
+
+      - name: APK test artifact yükle
+        uses: actions/upload-artifact@v4
+        with:
+          name: Stagepulse-Ses-Merkezi-Android-3.7.3-TEST-SIGNED
+          path: release-assets/*
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Mevcut 3.7.3 test sürümüne APK dosyasını ekle
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release view "v3.7.3" --json isPrerelease --jq '.isPrerelease' | grep -qx true
+          gh release upload "v3.7.3"             release-assets/Stagepulse-Ses-Merkezi-Android-3.7.3-TEST.apk             release-assets/Stagepulse-Ses-Merkezi-Android-3.7.3-TEST.apk.sha256             --clobber
