@@ -214,11 +214,11 @@ jobs:
           import re, sys
           from pathlib import Path
           report = Path(sys.argv[1]).read_text(encoding="utf-8", errors="replace")
-          signer_count = re.search(r"(?im)^Number of signers:\\s*(\\d+)\\s*$", report)
+          signer_count = re.search(r"(?im)^Number of signers:\s*(\d+)\s*$", report)
           if not signer_count or signer_count.group(1) != "1":
               raise SystemExit("APK tam olarak tek imzacıyla imzalanmamış.")
           digest_lines = re.findall(
-              r"(?im)^\\s*V\\d+\\s+Signer:\\s*certificate SHA-256 digest:\\s*([0-9a-fA-F:]+)\\s*$",
+              r"(?im)^\s*V\d+\s+Signer:\s*certificate SHA-256 digest:\s*([0-9a-fA-F:]+)\s*$",
               report,
           )
           digests = {value.replace(":", "").lower() for value in digest_lines}
