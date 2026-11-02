@@ -10,7 +10,9 @@ on:
       - ".github/workflows/build-android-test-apk.yml"
 
 permissions:
+  actions: read
   contents: write
+  security-events: write
 
 concurrency:
   group: ses-merkezi-android-test-apk
