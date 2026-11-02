@@ -1,5 +1,6 @@
 name: Stagepulse Ses Merkezi test sürümünü oluştur ve yayımla
 # 3.7.2 test dağıtım akışı; kararlı sürüm kanalını değiştirmez.
+# Windows sürüm testleri artık uygulama sürümünü kaynak dosyadan okur.
 
 on:
   repository_dispatch:
@@ -26,7 +27,7 @@ permissions:
 
 concurrency:
   group: ses-merkezi-release-${{ github.event.client_payload.release_version || github.event.inputs.release_version || '3.7.2' }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build-windows:
