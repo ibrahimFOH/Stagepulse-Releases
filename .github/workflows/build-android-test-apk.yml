@@ -29,10 +29,9 @@ jobs:
       source_sha: ${{ steps.detect.outputs.source_sha }}
       version: ${{ steps.detect.outputs.version }}
       version_code: ${{ steps.detect.outputs.version_code }}
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
-      - name: Releases deposunu al
-        uses: actions/checkout@v4
-
       - name: Özel Ses Merkezi kaynak kodunu al
         uses: actions/checkout@v4
         with:
@@ -69,8 +68,9 @@ jobs:
           VERSION="$(printf '%s\n' "$VERSION_DATA" | sed -n '1p')"
           VERSION_CODE="$(printf '%s\n' "$VERSION_DATA" | sed -n '2p')"
           LAST_SHA=""
-          if [ -f .github/test-apk-source.json ]; then
-            LAST_SHA="$(python3 -c 'import json; print(json.load(open(".github/test-apk-source.json")).get("source_sha", ""))')"
+          mkdir -p "$RUNNER_TEMP/last-android-build"
+          if gh release download "v$VERSION" --repo "$GITHUB_REPOSITORY" --pattern "Stagepulse-Ses-Merkezi-Android-TEST-build.json" --dir "$RUNNER_TEMP/last-android-build" >/dev/null 2>&1; then
+            LAST_SHA="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("source_sha", ""))' "$RUNNER_TEMP/last-android-build/Stagepulse-Ses-Merkezi-Android-TEST-build.json")"
           fi
           if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
             CHANGED=true
@@ -102,9 +102,6 @@ jobs:
       ANDROID_SIGNING_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
       ANDROID_SIGNING_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
     steps:
-      - name: Releases deposunu al
-        uses: actions/checkout@v4
-
       - name: Özel Ses Merkezi kaynak kodunu al
         uses: actions/checkout@v4
         with:
@@ -251,32 +248,3 @@ jobs:
             release-assets/Stagepulse-Ses-Merkezi-Android-${{ needs.detect.outputs.version }}-TEST.apk.sha256
             release-assets/Stagepulse-Ses-Merkezi-Android-TEST-build.json
 
-      - name: Son başarılı kaynak commitini kaydet
-        shell: bash
-        run: |
-          set -euo pipefail
-          for attempt in 1 2 3; do
-            git fetch origin main
-            git reset --hard origin/main
-            mkdir -p .github
-            python3 - "$SOURCE_SHA" "$RELEASE_VERSION" "$RELEASE_VERSION_CODE" <<'PY'
-            import json, sys
-            from pathlib import Path
-            data = {"source_sha": sys.argv[1], "version": sys.argv[2], "version_code": int(sys.argv[3])}
-            Path(".github/test-apk-source.json").write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
-            PY
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add .github/test-apk-source.json
-            if git diff --cached --quiet; then
-              echo "Android kaynak işareti zaten güncel."
-              exit 0
-            fi
-            git commit -m "chore(ci): record verified Android test APK source"
-            if git push origin HEAD:main; then
-              exit 0
-            fi
-            echo "Eşzamanlı depo güncellemesi algılandı; son ana dal yeniden alınıyor (deneme $attempt)."
-          done
-          echo "Android kaynak işareti üç denemede kaydedilemedi." >&2
-          exit 1
