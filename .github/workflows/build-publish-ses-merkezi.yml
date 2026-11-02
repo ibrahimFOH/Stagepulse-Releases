@@ -227,7 +227,7 @@ jobs:
           retention-days: 7
 
   publish:
-    name: İki platformu birlikte herkese açık yayımla
+    name: İki platformu test için taslak sürüm olarak hazırla
     needs: [build-windows, build-android]
     runs-on: ubuntu-latest
     steps:
@@ -322,7 +322,7 @@ jobs:
 
             Windows kurulum paketi ve kalıcı sertifika ile imzalanmış Android APK birlikte yayımlandı.
             Her dosyanın SHA-256 özeti yanında bulunur. Uygulama içi güncelleme bildirimi Supabase üzerinden sunulur.
-          draft: false
+          draft: true
           prerelease: false
           make_latest: true
           overwrite_files: true
