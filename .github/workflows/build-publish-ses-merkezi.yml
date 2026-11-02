@@ -3,10 +3,6 @@ name: Stagepulse Ses Merkezi kararlı sürümünü oluştur ve yayımla
 on:
   repository_dispatch:
     types: [ses-merkezi-release]
-  push:
-    branches: [release/3.7.1-build-once]
-    paths:
-      - ".github/workflows/build-publish-ses-merkezi.yml"
   workflow_dispatch:
     inputs:
       release_version:
