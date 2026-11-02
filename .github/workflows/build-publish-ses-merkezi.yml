@@ -225,11 +225,6 @@ jobs:
             echo "APK imza sertifikası kalıcı anahtar deposuyla eşleşmiyor." >&2
             exit 1
           fi
-          test -n "$EXPECTED_CERT" && test -n "$ACTUAL_CERT"
-          if [ "$EXPECTED_CERT" != "$ACTUAL_CERT" ]; then
-            echo "APK imza sertifikası kalıcı anahtar deposuyla eşleşmiyor." >&2
-            exit 1
-          fi
           BADGING="$("$AAPT" dump badging "$APK")"
           EXPECTED_CODE="$(python3 -c 'import os,re; m=re.fullmatch(r"(\d+)\.(\d+)\.(\d+)",os.environ["RELEASE_VERSION"]); print(int(m.group(1))*10000+int(m.group(2))*100+int(m.group(3)))')"
           grep -q "versionCode='$EXPECTED_CODE'" <<< "$BADGING"
