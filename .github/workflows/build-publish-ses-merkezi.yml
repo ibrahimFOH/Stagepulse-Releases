@@ -208,11 +208,21 @@ jobs:
           import re, sys
           from pathlib import Path
           report = Path(sys.argv[1]).read_text(encoding="utf-8", errors="replace")
-          signers = re.search(r"Number of signers:\s*(\d+)", report)
-          digests = re.findall(r"certificate SHA-256 digest:\s*([0-9a-fA-F:]+)", report, flags=re.IGNORECASE)
-          if not signers or signers.group(1) != "1" or len(digests) != 1:
-              raise SystemExit("APK tek imzacı ve tek sertifika SHA-256 parmak izi içermiyor.")
-          digest = digests[0].replace(":", "").lower()
+          digest_lines = re.findall(
+              r"(?im)^.*certificate SHA-256 digest:\s*([0-9a-fA-F:]+)\s*$",
+              report,
+          )
+          digests = {value.replace(":", "").lower() for value in digest_lines}
+          if len(digests) != 1:
+              raise SystemExit(
+                  f"APK tek bir sertifika SHA-256 parmak izi sunmuyor (bulunan: {len(digests)})."
+              )
+          signer_ids = set(re.findall(r"(?im)^\s*Signer\s*#(\d+)", report))
+          if signer_ids and signer_ids != {"1"}:
+              raise SystemExit(
+                  f"APK tek imzacı değil (imzacı numaraları: {', '.join(sorted(signer_ids))})."
+              )
+          digest = next(iter(digests))
           if not re.fullmatch(r"[0-9a-f]{64}", digest):
               raise SystemExit("APK sertifika SHA-256 parmak izi biçimi geçersiz.")
           print(digest)
