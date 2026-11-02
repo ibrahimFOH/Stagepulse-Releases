@@ -86,3 +86,42 @@ jobs:
             --request POST "$URL")"
           test "$STATUS" = "405"
           rm -f "$OPTIONS_HEADERS"
+
+  release-preflight:
+    name: Yayın deposu secret ve erişim ön kontrolü
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Kaynak depo erişimi ve kalıcı Android imzasını kontrol et
+        shell: bash
+        env:
+          SOURCE_REPO_READ_TOKEN: ${{ secrets.SOURCE_REPO_READ_TOKEN }}
+          ANDROID_SIGNING_KEYSTORE_BASE64: ${{ secrets.ANDROID_SIGNING_KEYSTORE_BASE64 }}
+          ANDROID_SIGNING_STORE_PASSWORD: ${{ secrets.ANDROID_SIGNING_STORE_PASSWORD }}
+          ANDROID_SIGNING_KEY_ALIAS: ${{ secrets.ANDROID_SIGNING_KEY_ALIAS }}
+          ANDROID_SIGNING_KEY_PASSWORD: ${{ secrets.ANDROID_SIGNING_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          missing=()
+          for name in SOURCE_REPO_READ_TOKEN ANDROID_SIGNING_KEYSTORE_BASE64 ANDROID_SIGNING_STORE_PASSWORD ANDROID_SIGNING_KEY_ALIAS ANDROID_SIGNING_KEY_PASSWORD; do
+            if [ -z "${!name:-}" ]; then missing+=("$name"); fi
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            {
+              echo "### Yayın ön kontrolü: eksik secret"
+              for name in "${missing[@]}"; do echo "- `$name`"; done
+              echo "Bu eksikler kararlı sürüm yayınını engeller. Değerler yalnızca Stagepulse-Releases deposuna eklenmelidir."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          AUTH="$(printf 'x-access-token:%s' "$SOURCE_REPO_READ_TOKEN" | base64 -w0)"
+          git -c "http.extraheader=AUTHORIZATION: basic $AUTH" ls-remote             https://github.com/ibrahimFOH/Stagepulse-Ses-Merkezi.git             refs/heads/integration/3.7.0-shared-core-demo >/dev/null
+          STORE="$RUNNER_TEMP/stagepulse-preflight.jks"
+          printf '%s' "$ANDROID_SIGNING_KEYSTORE_BASE64" | base64 --decode > "$STORE"
+          test -s "$STORE"
+          keytool -list -keystore "$STORE" -storepass "$ANDROID_SIGNING_STORE_PASSWORD" -alias "$ANDROID_SIGNING_KEY_ALIAS" >/dev/null
+          test -n "$ANDROID_SIGNING_KEY_PASSWORD"
+          rm -f "$STORE"
+          echo "### Yayın ön kontrolü: başarılı" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Özel kaynak depoya salt-okunur erişim doğrulandı."
+          echo "- Kalıcı Android imza deposu ve alias doğrulandı."
