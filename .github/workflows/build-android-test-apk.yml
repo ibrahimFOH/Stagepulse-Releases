@@ -46,8 +46,8 @@ jobs:
           import re
           from pathlib import Path
           text = Path("source/android/app/build.gradle").read_text(encoding="utf-8")
-          name = re.search(r"\\bversionName\\s+'([^']+)'", text)
-          code = re.search(r"\\bversionCode\\s+(\\d+)", text)
+          name = re.search(r"\bversionName\s+'([^']+)'", text)
+          code = re.search(r"\bversionCode\s+(\\d+)", text)
           if not name or not code:
               raise SystemExit("Android sürüm alanları bulunamadı.")
           match = re.fullmatch(r"(\\d+)\\.(\\d+)\\.(\\d+)", name.group(1))
