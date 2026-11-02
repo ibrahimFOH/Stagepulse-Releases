@@ -114,14 +114,30 @@ jobs:
             } >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
-          AUTH="$(printf 'x-access-token:%s' "$SOURCE_REPO_READ_TOKEN" | base64 -w0)"
-          git -c "http.extraheader=AUTHORIZATION: basic $AUTH" ls-remote             https://github.com/ibrahimFOH/Stagepulse-Ses-Merkezi.git             refs/heads/integration/3.7.0-shared-core-demo >/dev/null
           STORE="$RUNNER_TEMP/stagepulse-preflight.jks"
           printf '%s' "$ANDROID_SIGNING_KEYSTORE_BASE64" | base64 --decode > "$STORE"
           test -s "$STORE"
-          keytool -list -keystore "$STORE" -storepass "$ANDROID_SIGNING_STORE_PASSWORD" -alias "$ANDROID_SIGNING_KEY_ALIAS" >/dev/null
-          test -n "$ANDROID_SIGNING_KEY_PASSWORD"
-          rm -f "$STORE"
+          if ! keytool -list -keystore "$STORE" -storepass "$ANDROID_SIGNING_STORE_PASSWORD" -alias "$ANDROID_SIGNING_KEY_ALIAS" >/dev/null; then
+            echo "::error::JKS dosyası, keystore parolası veya alias doğrulanamadı."
+            exit 1
+          fi
+          PROBE_DIR="$(mktemp -d)"
+          printf 'Stagepulse imza kontrolü\n' > "$PROBE_DIR/probe.txt"
+          jar --create --file "$PROBE_DIR/probe.jar" -C "$PROBE_DIR" probe.txt
+          if ! jarsigner -keystore "$STORE" -storepass "$ANDROID_SIGNING_STORE_PASSWORD" -keypass "$ANDROID_SIGNING_KEY_PASSWORD" -signedjar "$PROBE_DIR/probe-signed.jar" "$PROBE_DIR/probe.jar" "$ANDROID_SIGNING_KEY_ALIAS" >/dev/null 2>&1; then
+            echo "::error::Android özel anahtar parolası veya alias doğrulanamadı."
+            rm -rf "$PROBE_DIR" "$STORE"
+            exit 1
+          fi
+          jarsigner -verify "$PROBE_DIR/probe-signed.jar" >/dev/null
+          rm -rf "$PROBE_DIR" "$STORE"
+          AUTH="$(printf 'x-access-token:%s' "$SOURCE_REPO_READ_TOKEN" | base64 -w0)"
+          if ! GIT_TERMINAL_PROMPT=0 git -c "http.extraheader=AUTHORIZATION: basic $AUTH" ls-remote \
+            https://github.com/ibrahimFOH/Stagepulse-Ses-Merkezi.git \
+            refs/heads/integration/3.7.0-shared-core-demo >/dev/null; then
+            echo "::error::SOURCE_REPO_READ_TOKEN özel Stagepulse-Ses-Merkezi deposunu okuyamıyor. Fine-grained token için doğru depo ve Contents: Read-only iznini kontrol edin."
+            exit 1
+          fi
           echo "### Yayın ön kontrolü: başarılı" >> "$GITHUB_STEP_SUMMARY"
           echo "- Özel kaynak depoya salt-okunur erişim doğrulandı."
           echo "- Kalıcı Android imza deposu ve alias doğrulandı."
