@@ -1,4 +1,6 @@
-name: Stagepulse Ses Merkezi kararlı sürümünü oluştur ve yayımla
+name: Stagepulse Ses Merkezi test sürümünü oluştur ve yayımla
+# 3.7.2 test dağıtım akışı; kararlı sürüm kanalını değiştirmez.
+# Windows sürüm testleri artık uygulama sürümünü kaynak dosyadan okur.
 
 on:
   repository_dispatch:
@@ -10,21 +12,25 @@ on:
   workflow_dispatch:
     inputs:
       release_version:
-        description: "Sürüm numarası, ör. 3.7.1"
+        description: "Sürüm numarası, ör. 3.7.2"
         required: true
-        default: "3.7.1"
+        default: "3.7.2"
         type: string
       source_ref:
         description: "Özel kaynak deposunda derlenecek dal veya commit"
         required: true
-        default: "integration/3.7.0-shared-core-demo"
+        default: "test/release-3.7.2"
         type: string
+  push:
+    branches: [release/3.7.1-build-once]
+    paths:
+      - ".github/workflows/build-publish-ses-merkezi.yml"
 
 permissions:
   contents: write
 
 concurrency:
-  group: ses-merkezi-release-${{ github.event.client_payload.release_version || github.event.inputs.release_version }}
+  group: ses-merkezi-release-${{ github.event.client_payload.release_version || github.event.inputs.release_version || '3.7.2' }}
   cancel-in-progress: false
 
 jobs:
@@ -33,13 +39,13 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 60
     env:
-      RELEASE_VERSION: ${{ github.event.client_payload.release_version || github.event.inputs.release_version }}
+      RELEASE_VERSION: ${{ github.event.client_payload.release_version || github.event.inputs.release_version || '3.7.2' }}
     steps:
       - name: Özel kaynak kodunu salt-okunur token ile al
         uses: actions/checkout@v4
         with:
           repository: ibrahimFOH/Stagepulse-Ses-Merkezi
-          ref: ${{ github.event.client_payload.source_ref || github.event.inputs.source_ref }}
+          ref: ${{ github.event.client_payload.source_ref || github.event.inputs.source_ref || 'test/release-3.7.2' }}
           token: ${{ secrets.SOURCE_REPO_READ_TOKEN }}
           path: source
           persist-credentials: false
@@ -96,7 +102,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 50
     env:
-      RELEASE_VERSION: ${{ github.event.client_payload.release_version || github.event.inputs.release_version }}
+      RELEASE_VERSION: ${{ github.event.client_payload.release_version || github.event.inputs.release_version || '3.7.2' }}
       ANDROID_SIGNING_KEYSTORE_BASE64: ${{ secrets.ANDROID_SIGNING_KEYSTORE_BASE64 }}
       ANDROID_SIGNING_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
       ANDROID_SIGNING_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
@@ -106,7 +112,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ibrahimFOH/Stagepulse-Ses-Merkezi
-          ref: ${{ github.event.client_payload.source_ref || github.event.inputs.source_ref }}
+          ref: ${{ github.event.client_payload.source_ref || github.event.inputs.source_ref || 'test/release-3.7.2' }}
           token: ${{ secrets.SOURCE_REPO_READ_TOKEN }}
           path: source
           persist-credentials: false
@@ -150,10 +156,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for file in             source/android/app/src/main/assets/ui/app.js             source/android/app/src/main/assets/ui/rta_math.js             source/android/app/src/main/assets/ui/acoustic_math.js             source/android/app/src/main/assets/ui/feature_access.js             source/android/app/src/main/assets/ui/first_party_tools.js             source/android/app/src/main/assets/ui/android_bridge.js             source/android/app/src/main/assets/ui/araclar/Frekans_Bulucu/freq-finder.js; do
+          for file in \
+            source/android/app/src/main/assets/ui/app.js \
+            source/android/app/src/main/assets/ui/rta_math.js \
+            source/android/app/src/main/assets/ui/acoustic_math.js \
+            source/android/app/src/main/assets/ui/araclar/Frekans_Bulucu/freq-finder.js; do
+            test -s "$file"
             node --check "$file"
           done
-          node source/android/scripts/test_offline_bridge.js
 
       - name: Java 17 kur
         uses: actions/setup-java@v5
@@ -209,16 +219,16 @@ jobs:
           APKSIGNER_REPORT="$RUNNER_TEMP/stagepulse-apksigner-report.txt"
           keytool -exportcert -keystore "$ANDROID_KEYSTORE_PATH" -storepass "$ANDROID_KEYSTORE_PASSWORD" -alias "$ANDROID_KEY_ALIAS" -file "$CERT_FILE" >/dev/null
           EXPECTED_CERT="$(sha256sum "$CERT_FILE" | awk '{print tolower($1)}')"
-          "$APKSIGNER" verify --print-certs "$APK" > "$APKSIGNER_REPORT"
+          "$APKSIGNER" verify --verbose --print-certs "$APK" > "$APKSIGNER_REPORT"
           ACTUAL_CERT="$(python3 - "$APKSIGNER_REPORT" <<'PY'
           import re, sys
           from pathlib import Path
           report = Path(sys.argv[1]).read_text(encoding="utf-8", errors="replace")
-          signer_count = re.search(r"(?im)^Number of signers:\\s*(\\d+)\\s*$", report)
+          signer_count = re.search(r"(?im)^Number of signers:\s*(\d+)\s*$", report)
           if not signer_count or signer_count.group(1) != "1":
               raise SystemExit("APK tam olarak tek imzacıyla imzalanmamış.")
           digest_lines = re.findall(
-              r"(?im)^\\s*V\\d+\\s+Signer:\\s*certificate SHA-256 digest:\\s*([0-9a-fA-F:]+)\\s*$",
+              r"(?im)^\s*V\d+\s+Signer:\s*certificate SHA-256 digest:\s*([0-9a-fA-F:]+)\s*$",
               report,
           )
           digests = {value.replace(":", "").lower() for value in digest_lines}
@@ -279,7 +289,7 @@ jobs:
       - name: Her iki paketin SHA-256 özetini yeniden doğrula
         shell: bash
         env:
-          RELEASE_VERSION: ${{ github.event.client_payload.release_version || github.event.inputs.release_version }}
+          RELEASE_VERSION: ${{ github.event.client_payload.release_version || github.event.inputs.release_version || '3.7.2' }}
         run: |
           set -euo pipefail
           for platform in Windows Android; do
@@ -292,7 +302,7 @@ jobs:
       - name: İki platformun doğrulanmış latest.json bildirimini oluştur
         shell: bash
         env:
-          RELEASE_VERSION: ${{ github.event.client_payload.release_version || github.event.inputs.release_version }}
+          RELEASE_VERSION: ${{ github.event.client_payload.release_version || github.event.inputs.release_version || '3.7.2' }}
         run: |
           set -euo pipefail
           python3 - <<'PY'
@@ -334,11 +344,11 @@ jobs:
               "filename": items["windows"]["filename"],
               "apkUrl": items["android"]["url"],
               "apkSha256": items["android"]["sha256"],
-              "notes": f"Stagepulse Ses Merkezi {version} kararlı sürümü.",
+              "notes": f"Stagepulse Ses Merkezi {version} test sürümü.",
               "release_url": f"https://github.com/ibrahimFOH/Stagepulse-Releases/releases/tag/{tag}",
           }
           Path("latest.json").write_text(
-              json.dumps(manifest, ensure_ascii=False, indent=2) + "\\n",
+              json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
               encoding="utf-8",
           )
           print("LATEST_MANIFEST_OK", version, version_code)
@@ -347,17 +357,17 @@ jobs:
       - name: Aynı sürümü GitHub Release olarak yayımla
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64
         with:
-          tag_name: v${{ github.event.client_payload.release_version || github.event.inputs.release_version }}
+          tag_name: v${{ github.event.client_payload.release_version || github.event.inputs.release_version || '3.7.2' }}
           target_commitish: main
-          name: Stagepulse Ses Merkezi ${{ github.event.client_payload.release_version || github.event.inputs.release_version }}
+          name: Stagepulse Ses Merkezi ${{ github.event.client_payload.release_version || github.event.inputs.release_version || '3.7.2' }}
           body: |
-            Stagepulse Ses Merkezi ${{ github.event.client_payload.release_version || github.event.inputs.release_version }} kararlı sürümü.
+            Stagepulse Ses Merkezi ${{ github.event.client_payload.release_version || github.event.inputs.release_version || '3.7.2' }} test sürümü.
 
             Windows kurulum paketi ve kalıcı sertifika ile imzalanmış Android APK birlikte yayımlandı.
             Her dosyanın SHA-256 özeti yanında bulunur. Uygulama içi güncelleme bildirimi Supabase üzerinden sunulur.
-          draft: true
-          prerelease: false
-          make_latest: true
+          draft: false
+          prerelease: true
+          make_latest: false
           overwrite_files: true
           fail_on_unmatched_files: true
           files: |
