@@ -80,7 +80,7 @@ jobs:
           OPTIONS_STATUS="$(curl --silent --show-error --dump-header "$OPTIONS_HEADERS" --output /dev/null --write-out "%{http_code}" \
             --request OPTIONS "$URL")"
           test "$OPTIONS_STATUS" = "200"
-          grep -qi '^access-control-allow-origin: \\*' "$OPTIONS_HEADERS"
+          grep -qi '^access-control-allow-origin: \*' "$OPTIONS_HEADERS"
           grep -qi '^access-control-allow-methods: GET, OPTIONS' "$OPTIONS_HEADERS"
           STATUS="$(curl --silent --show-error --output /dev/null --write-out "%{http_code}" \
             --request POST "$URL")"
