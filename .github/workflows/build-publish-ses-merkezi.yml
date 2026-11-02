@@ -26,7 +26,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: ses-merkezi-release-${{ github.event.client_payload.release_version || github.event.inputs.release_version || '3.7.3' }}
+  group: ses-merkezi-release-pipeline
   cancel-in-progress: false
 
 jobs:
@@ -369,3 +369,46 @@ jobs:
           files: |
             release-assets/*
             latest.json
+      - name: Güncel manifest deposunu ana dala al
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: update-index
+          persist-credentials: true
+
+      - name: Doğrulanmış güncelleme manifestini otomatik yayımla
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ github.event.client_payload.release_version || github.event.inputs.release_version || '3.7.3' }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, re
+          from pathlib import Path
+          version = os.environ["RELEASE_VERSION"]
+          candidate = json.loads(Path("latest.json").read_text(encoding="utf-8"))
+          if candidate.get("version") != version or candidate.get("published") is not True:
+              raise SystemExit("Yayımlanacak manifest sürümü veya yayın durumu geçersiz.")
+          for key in ("windows", "android"):
+              item = candidate.get(key)
+              if not isinstance(item, dict) or not re.fullmatch(r"[a-f0-9]{64}", str(item.get("sha256", ""))):
+                  raise SystemExit(f"{key} dağıtım kaydı veya SHA-256 eksik.")
+          index = Path("update-index/latest.json")
+          if index.exists():
+              current = json.loads(index.read_text(encoding="utf-8"))
+              def parts(value): return tuple(int(x) for x in str(value).split("."))
+              if parts(current.get("version", "0")) > parts(version):
+                  print("Daha yeni manifest zaten yayımlı; eski sürüm ana manifestin üzerine yazılmadı.")
+                  raise SystemExit(0)
+          index.write_text(json.dumps(candidate, ensure_ascii=False, indent=2) + "\\n", encoding="utf-8")
+          PY
+          cd update-index
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add latest.json
+          if git diff --cached --quiet; then
+            echo "Ana güncelleme manifesti zaten güncel."
+            exit 0
+          fi
+          git commit -m "chore(updates): publish verified Ses Merkezi ${RELEASE_VERSION} manifest"
+          git push origin HEAD:main
