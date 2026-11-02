@@ -27,6 +27,9 @@ jobs:
       version: ${{ steps.detect.outputs.version }}
       version_code: ${{ steps.detect.outputs.version_code }}
     steps:
+      - name: Releases deposunu al
+        uses: actions/checkout@v4
+
       - name: Özel Ses Merkezi kaynak kodunu al
         uses: actions/checkout@v4
         with:
