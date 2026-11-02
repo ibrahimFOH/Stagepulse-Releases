@@ -42,7 +42,9 @@ jobs:
           set -euo pipefail
           URL="https://itasctyjzyewcykozuex.supabase.co/functions/v1/ses-merkezi-updates"
           curl --retry 3 --retry-all-errors --retry-delay 2 --fail --silent --show-error \
-            --header "Accept: application/json" "$URL" -o manifest.json
+            --dump-header manifest-headers.txt --header "Accept: application/json" "$URL" -o manifest.json
+          grep -qi '^content-type: application/json' manifest-headers.txt
+          grep -qi '^cache-control: public' manifest-headers.txt
           python3 - <<'PY'
           import json, re
           from pathlib import Path
@@ -74,8 +76,13 @@ jobs:
         run: |
           set -euo pipefail
           URL="https://itasctyjzyewcykozuex.supabase.co/functions/v1/ses-merkezi-updates"
-          curl --silent --show-error --output /dev/null --write-out "%{http_code}" \
-            --request OPTIONS "$URL" | grep -qx "200"
+          OPTIONS_HEADERS="$(mktemp)"
+          OPTIONS_STATUS="$(curl --silent --show-error --dump-header "$OPTIONS_HEADERS" --output /dev/null --write-out "%{http_code}" \
+            --request OPTIONS "$URL")"
+          test "$OPTIONS_STATUS" = "200"
+          grep -qi '^access-control-allow-origin: \\*' "$OPTIONS_HEADERS"
+          grep -qi '^access-control-allow-methods: GET, OPTIONS' "$OPTIONS_HEADERS"
           STATUS="$(curl --silent --show-error --output /dev/null --write-out "%{http_code}" \
             --request POST "$URL")"
           test "$STATUS" = "405"
+          rm -f "$OPTIONS_HEADERS"
