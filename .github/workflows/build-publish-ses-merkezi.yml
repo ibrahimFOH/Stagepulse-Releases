@@ -210,19 +210,17 @@ jobs:
           import re, sys
           from pathlib import Path
           report = Path(sys.argv[1]).read_text(encoding="utf-8", errors="replace")
+          signer_count = re.search(r"(?im)^Number of signers:\\s*(\\d+)\\s*$", report)
+          if not signer_count or signer_count.group(1) != "1":
+              raise SystemExit("APK tam olarak tek imzacıyla imzalanmamış.")
           digest_lines = re.findall(
-              r"(?im)^.*certificate SHA-256 digest:\s*([0-9a-fA-F:]+)\s*$",
+              r"(?im)^\\s*V\\d+\\s+Signer:\\s*certificate SHA-256 digest:\\s*([0-9a-fA-F:]+)\\s*$",
               report,
           )
           digests = {value.replace(":", "").lower() for value in digest_lines}
           if len(digests) != 1:
               raise SystemExit(
                   f"APK tek bir sertifika SHA-256 parmak izi sunmuyor (bulunan: {len(digests)})."
-              )
-          signer_ids = set(re.findall(r"(?im)^\s*Signer\s*#(\d+)", report))
-          if signer_ids and signer_ids != {"1"}:
-              raise SystemExit(
-                  f"APK tek imzacı değil (imzacı numaraları: {', '.join(sorted(signer_ids))})."
               )
           digest = next(iter(digests))
           if not re.fullmatch(r"[0-9a-f]{64}", digest):
