@@ -125,3 +125,16 @@ jobs:
           echo "### Yayın ön kontrolü: başarılı" >> "$GITHUB_STEP_SUMMARY"
           echo "- Özel kaynak depoya salt-okunur erişim doğrulandı."
           echo "- Kalıcı Android imza deposu ve alias doğrulandı."
+
+  runner-smoke-windows:
+    name: Herkese açık Windows runner erişimi
+    runs-on: windows-latest
+    timeout-minutes: 3
+    steps:
+      - name: Windows runner ve PowerShell doğrulaması
+        shell: pwsh
+        run: |
+          if ($env:RUNNER_OS -ne "Windows") { throw "Beklenen Windows runner bulunamadı." }
+          if (-not (Get-Command python -ErrorAction SilentlyContinue)) { throw "Python bulunamadı." }
+          Write-Host "PUBLIC_WINDOWS_RUNNER_OK"
+          Write-Host "Python: $(python --version)"
