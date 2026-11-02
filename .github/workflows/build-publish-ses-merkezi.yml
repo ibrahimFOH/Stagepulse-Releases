@@ -200,7 +200,7 @@ jobs:
           "$APKSIGNER" verify --verbose --print-certs "$APK"
           "$ZIPALIGN" -c -v 4 "$APK"
           EXPECTED_CERT="$(keytool -list -v -keystore "$ANDROID_KEYSTORE_PATH" -storepass "$ANDROID_KEYSTORE_PASSWORD" -alias "$ANDROID_KEY_ALIAS" | awk -F': ' '/SHA256:/{gsub(":","",$2); print tolower($2); exit}')"
-          ACTUAL_CERT="$("$APKSIGNER" verify --print-certs "$APK" | awk -F': ' '/Signer #1 certificate SHA-256 digest:/{print tolower($2); exit}')"
+          ACTUAL_CERT="$("$APKSIGNER" verify --print-certs "$APK" | awk -F': ' '/certificate SHA-256 digest:/{gsub(":", "", $NF); print tolower($NF); exit}')"
           test -n "$EXPECTED_CERT" && test -n "$ACTUAL_CERT"
           if [ "$EXPECTED_CERT" != "$ACTUAL_CERT" ]; then
             echo "APK imza sertifikası kalıcı anahtar deposuyla eşleşmiyor." >&2
