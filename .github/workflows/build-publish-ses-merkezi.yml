@@ -25,7 +25,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: ses-merkezi-release-${{ github.event.client_payload.release_version || github.event.inputs.release_version || '3.7.2' || '3.7.2' }}
+  group: ses-merkezi-release-${{ github.event.client_payload.release_version || github.event.inputs.release_version || '3.7.2' }}
   cancel-in-progress: true
 
 jobs:
@@ -343,7 +343,7 @@ jobs:
               "release_url": f"https://github.com/ibrahimFOH/Stagepulse-Releases/releases/tag/{tag}",
           }
           Path("latest.json").write_text(
-              json.dumps(manifest, ensure_ascii=False, indent=2) + "\\n",
+              json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
               encoding="utf-8",
           )
           print("LATEST_MANIFEST_OK", version, version_code)
