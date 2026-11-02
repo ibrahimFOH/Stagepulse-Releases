@@ -400,7 +400,7 @@ jobs:
               if parts(current.get("version", "0")) > parts(version):
                   print("Daha yeni manifest zaten yayımlı; eski sürüm ana manifestin üzerine yazılmadı.")
                   raise SystemExit(0)
-          index.write_text(json.dumps(candidate, ensure_ascii=False, indent=2) + "\\n", encoding="utf-8")
+          index.write_text(json.dumps(candidate, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
           PY
           cd update-index
           git config user.name "github-actions[bot]"
