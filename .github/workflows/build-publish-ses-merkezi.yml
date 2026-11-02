@@ -414,3 +414,28 @@ jobs:
           fi
           git commit -m "chore(updates): publish verified Ses Merkezi ${RELEASE_VERSION} manifest"
           git push origin HEAD:main
+      - name: Genel güncelleme manifestini canlı kaynaktan doğrula
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ github.event.client_payload.release_version || github.event.inputs.release_version || '3.7.3' }}
+        run: |
+          set -euo pipefail
+          manifest_file="$(mktemp)"
+          trap 'rm -f "$manifest_file"' EXIT
+          curl --fail --location --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 15 --max-time 90 \
+            --header "Accept: application/json" --header "Cache-Control: no-cache" \
+            "https://raw.githubusercontent.com/ibrahimFOH/Stagepulse-Releases/main/latest.json" --output "$manifest_file"
+          python3 - "$manifest_file" "$RELEASE_VERSION" <<'PY'
+          import json, re, sys
+          from pathlib import Path
+          data = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          if data.get("ok") is not True or data.get("published") is not True or data.get("version") != sys.argv[2]:
+              raise SystemExit("Canlı güncelleme manifesti yayımlanan sürümle eşleşmiyor.")
+          for key in ("windows", "android"):
+              item = data.get(key)
+              if not isinstance(item, dict) or not re.fullmatch(r"[a-f0-9]{64}", str(item.get("sha256", ""))):
+                  raise SystemExit(f"Canlı {key} manifest kaydı veya SHA-256 geçersiz.")
+              if not str(item.get("url", "")).startswith("https://github.com/ibrahimFOH/Stagepulse-Releases/releases/download/"):
+                  raise SystemExit(f"Canlı {key} indirme adresi beklenen GitHub Release kaynağı değil.")
+          print("CANONICAL_UPDATE_MANIFEST_OK", data["version"])
+          PY
