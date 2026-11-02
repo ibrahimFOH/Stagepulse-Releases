@@ -1,4 +1,5 @@
 name: Ses Merkezi Android otomatik test APK
+# v3: responsive SPL/RTA canvas sizing verification
 
 on:
   workflow_dispatch:
@@ -15,7 +16,7 @@ permissions:
   security-events: write
 
 concurrency:
-  group: ses-merkezi-android-test-apk-v2
+  group: ses-merkezi-android-test-apk-v3
   cancel-in-progress: false
 
 jobs:
