@@ -134,8 +134,13 @@ jobs:
           retention-days: 30
 
       - name: Mevcut 3.7.3 test sürümüne APK dosyasını ekle
-        shell: bash
-        run: |
-          set -euo pipefail
-          gh release view "v3.7.3" --json isPrerelease --jq '.isPrerelease' | grep -qx true
-          gh release upload "v3.7.3"             release-assets/Stagepulse-Ses-Merkezi-Android-3.7.3-TEST.apk             release-assets/Stagepulse-Ses-Merkezi-Android-3.7.3-TEST.apk.sha256             --clobber
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v3.7.3
+          prerelease: true
+          make_latest: false
+          overwrite_files: true
+          fail_on_unmatched_files: true
+          files: |
+            release-assets/Stagepulse-Ses-Merkezi-Android-3.7.3-TEST.apk
+            release-assets/Stagepulse-Ses-Merkezi-Android-3.7.3-TEST.apk.sha256
