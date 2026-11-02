@@ -1,4 +1,5 @@
 name: Stagepulse Ses Merkezi test sürümünü oluştur ve yayımla
+# 3.7.2 test dağıtım akışı; kararlı sürüm kanalını değiştirmez.
 
 on:
   repository_dispatch:
