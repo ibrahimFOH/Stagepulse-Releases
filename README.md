@@ -35,7 +35,7 @@ Bu uç nokta GitHub Release içindeki sabit `latest.json` dosyasını okur ve s�
 
 ## İlk kurulum: güvenli yayın yetkileri
 
-Yayın deposunun iş akışları kaynak kodu bu özel depodan salt-okunur olarak alır. Bu nedenle `Stagepulse-Releases` deposunda **Settings → Secrets and variables → Actions** bölümüne aşağıdaki değerler eklenmelidir.
+Yayın deposunun iş akışları kaynak kodu bu özel depodan salt-okunur olarak alır. Bu nedenle `Stagepulse-Releases` deposunda **Settings → Secrets and variables → Actions** bölümüne aşağıdaki değerler eklenmelidir. Bu sırlar özel kaynak depoya değil, yayın deposuna kaydedilmelidir. Yayın deposunda ayrıca **Settings → Actions → General → Workflow permissions** bölümünde `Read and write permissions` etkin olmalıdır; `GITHUB_TOKEN` yalnızca yayın deposunda Release ve dosya oluşturmak için `contents: write` alır.
 
 | Secret adı | Kullanım |
 |---|---|
