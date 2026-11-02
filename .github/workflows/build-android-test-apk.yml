@@ -15,7 +15,7 @@ permissions:
   security-events: write
 
 concurrency:
-  group: ses-merkezi-android-test-apk
+  group: ses-merkezi-android-test-apk-v2
   cancel-in-progress: false
 
 jobs:
