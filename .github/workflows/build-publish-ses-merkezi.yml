@@ -13,7 +13,7 @@ on:
       source_ref:
         description: "Özel kaynak deposunda derlenecek dal veya commit"
         required: true
-        default: "integration/3.7.0-shared-core-demo"
+        default: "main"
         type: string
 
 permissions:
