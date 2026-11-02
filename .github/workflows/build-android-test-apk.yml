@@ -72,7 +72,9 @@ jobs:
           if [ -f .github/test-apk-source.json ]; then
             LAST_SHA="$(python3 -c 'import json; print(json.load(open(".github/test-apk-source.json")).get("source_sha", ""))')"
           fi
-          if [ "$GITHUB_EVENT_NAME" = "schedule" ] && [ "$SOURCE_SHA" = "$LAST_SHA" ]; then
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            CHANGED=true
+          elif [ "$SOURCE_SHA" = "$LAST_SHA" ]; then
             CHANGED=false
           else
             CHANGED=true
@@ -253,17 +255,28 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p .github
-          python3 - "$SOURCE_SHA" "$RELEASE_VERSION" "$RELEASE_VERSION_CODE" <<'PY'
-          import json, sys
-          from pathlib import Path
-          data = {"source_sha": sys.argv[1], "version": sys.argv[2], "version_code": int(sys.argv[3])}
-          Path(".github/test-apk-source.json").write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
-          PY
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .github/test-apk-source.json
-          if ! git diff --cached --quiet; then
+          for attempt in 1 2 3; do
+            git fetch origin main
+            git reset --hard origin/main
+            mkdir -p .github
+            python3 - "$SOURCE_SHA" "$RELEASE_VERSION" "$RELEASE_VERSION_CODE" <<'PY'
+            import json, sys
+            from pathlib import Path
+            data = {"source_sha": sys.argv[1], "version": sys.argv[2], "version_code": int(sys.argv[3])}
+            Path(".github/test-apk-source.json").write_text(json.dumps(data, indent=2) + "\\n", encoding="utf-8")
+            PY
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add .github/test-apk-source.json
+            if git diff --cached --quiet; then
+              echo "Android kaynak işareti zaten güncel."
+              exit 0
+            fi
             git commit -m "chore(ci): record verified Android test APK source"
-            git push origin HEAD:main
-          fi
+            if git push origin HEAD:main; then
+              exit 0
+            fi
+            echo "Eşzamanlı depo güncellemesi algılandı; son ana dal yeniden alınıyor (deneme $attempt)."
+          done
+          echo "Android kaynak işareti üç denemede kaydedilemedi." >&2
+          exit 1
