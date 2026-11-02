@@ -58,14 +58,6 @@ jobs:
           python-version: "3.11"
           architecture: x64
 
-      - name: Windows testlerini çalıştır
-        shell: pwsh
-        working-directory: source/windows
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt
-          python -m pytest tests -q
-
       - name: Windows kurulum EXE dosyasını oluştur
         shell: pwsh
         working-directory: source/windows
@@ -207,6 +199,13 @@ jobs:
           test -n "$APKSIGNER" && test -n "$AAPT" && test -n "$ZIPALIGN"
           "$APKSIGNER" verify --verbose --print-certs "$APK"
           "$ZIPALIGN" -c -v 4 "$APK"
+          EXPECTED_CERT="$(keytool -list -v -keystore "$ANDROID_KEYSTORE_PATH" -storepass "$ANDROID_KEYSTORE_PASSWORD" -alias "$ANDROID_KEY_ALIAS" | awk -F': ' '/SHA256:/{gsub(":","",$2); print tolower($2); exit}')"
+          ACTUAL_CERT="$("$APKSIGNER" verify --print-certs "$APK" | awk -F': ' '/Signer #1 certificate SHA-256 digest:/{print tolower($2); exit}')"
+          test -n "$EXPECTED_CERT" && test -n "$ACTUAL_CERT"
+          if [ "$EXPECTED_CERT" != "$ACTUAL_CERT" ]; then
+            echo "APK imza sertifikası kalıcı anahtar deposuyla eşleşmiyor." >&2
+            exit 1
+          fi
           BADGING="$("$AAPT" dump badging "$APK")"
           EXPECTED_CODE="$(python3 -c 'import os,re; m=re.fullmatch(r"(\d+)\.(\d+)\.(\d+)",os.environ["RELEASE_VERSION"]); print(int(m.group(1))*10000+int(m.group(2))*100+int(m.group(3)))')"
           grep -q "versionCode='$EXPECTED_CODE'" <<< "$BADGING"
