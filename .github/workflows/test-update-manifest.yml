@@ -109,7 +109,7 @@ jobs:
           if [ "${#missing[@]}" -gt 0 ]; then
             {
               echo "### Yayın ön kontrolü: eksik secret"
-              for name in "${missing[@]}"; do printf -- "- %s\n" "$name"; done
+              for name in "${missing[@]}"; do printf -- "- %s\n" "$name"; echo "::warning::Missing required release secret: $name"; done
               echo "Bu eksikler kararlı sürüm yayınını engeller. Değerler yalnızca Stagepulse-Releases deposuna eklenmelidir."
             } >> "$GITHUB_STEP_SUMMARY"
             exit 1
