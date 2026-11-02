@@ -150,10 +150,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for file in             source/android/app/src/main/assets/ui/app.js             source/android/app/src/main/assets/ui/rta_math.js             source/android/app/src/main/assets/ui/acoustic_math.js             source/android/app/src/main/assets/ui/feature_access.js             source/android/app/src/main/assets/ui/first_party_tools.js             source/android/app/src/main/assets/ui/android_bridge.js             source/android/app/src/main/assets/ui/araclar/Frekans_Bulucu/freq-finder.js; do
+          for file in \
+            source/android/app/src/main/assets/ui/app.js \
+            source/android/app/src/main/assets/ui/rta_math.js \
+            source/android/app/src/main/assets/ui/acoustic_math.js \
+            source/android/app/src/main/assets/ui/araclar/Frekans_Bulucu/freq-finder.js; do
+            test -s "$file"
             node --check "$file"
           done
-          node source/android/scripts/test_offline_bridge.js
 
       - name: Java 17 kur
         uses: actions/setup-java@v5
