@@ -199,8 +199,32 @@ jobs:
           test -n "$APKSIGNER" && test -n "$AAPT" && test -n "$ZIPALIGN"
           "$APKSIGNER" verify --verbose --print-certs "$APK"
           "$ZIPALIGN" -c -v 4 "$APK"
-          EXPECTED_CERT="$(keytool -list -v -keystore "$ANDROID_KEYSTORE_PATH" -storepass "$ANDROID_KEYSTORE_PASSWORD" -alias "$ANDROID_KEY_ALIAS" | awk -F': ' '/SHA256:/{gsub(":","",$2); print tolower($2); exit}')"
-          ACTUAL_CERT="$("$APKSIGNER" verify --print-certs "$APK" | awk -F': ' '/certificate SHA-256 digest:/{gsub(":", "", $NF); print tolower($NF); exit}')"
+          CERT_FILE="$RUNNER_TEMP/stagepulse-release-cert.der"
+          APKSIGNER_REPORT="$RUNNER_TEMP/stagepulse-apksigner-report.txt"
+          keytool -exportcert -keystore "$ANDROID_KEYSTORE_PATH" -storepass "$ANDROID_KEYSTORE_PASSWORD" -alias "$ANDROID_KEY_ALIAS" -file "$CERT_FILE" >/dev/null
+          EXPECTED_CERT="$(sha256sum "$CERT_FILE" | awk '{print tolower($1)}')"
+          "$APKSIGNER" verify --print-certs "$APK" > "$APKSIGNER_REPORT"
+          ACTUAL_CERT="$(python3 - "$APKSIGNER_REPORT" <<'PY'
+import re, sys
+from pathlib import Path
+text = Path(sys.argv[1]).read_text(encoding="utf-8", errors="replace")
+signers = re.search(r"Number of signers:\\s*(\\d+)", text)
+digests = re.findall(r"certificate SHA-256 digest:\\s*([0-9a-fA-F:]+)", text, flags=re.IGNORECASE)
+if not signers or signers.group(1) != "1" or len(digests) != 1:
+    raise SystemExit("APK tek imzacı ve tek sertifika SHA-256 parmak izi içermiyor.")
+digest = digests[0].replace(":", "").lower()
+if not re.fullmatch(r"[0-9a-f]{64}", digest):
+    raise SystemExit("APK sertifika SHA-256 parmak izi biçimi geçersiz.")
+print(digest)
+PY
+          )"
+          test -n "$EXPECTED_CERT" && test -n "$ACTUAL_CERT"
+          echo "Keystore sertifika SHA-256: $EXPECTED_CERT"
+          echo "APK imza sertifikası SHA-256: $ACTUAL_CERT"
+          if [ "$EXPECTED_CERT" != "$ACTUAL_CERT" ]; then
+            echo "APK imza sertifikası kalıcı anahtar deposuyla eşleşmiyor." >&2
+            exit 1
+          fi
           test -n "$EXPECTED_CERT" && test -n "$ACTUAL_CERT"
           if [ "$EXPECTED_CERT" != "$ACTUAL_CERT" ]; then
             echo "APK imza sertifikası kalıcı anahtar deposuyla eşleşmiyor." >&2
