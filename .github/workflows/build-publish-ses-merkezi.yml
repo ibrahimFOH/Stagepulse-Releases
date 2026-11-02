@@ -359,7 +359,7 @@ jobs:
 
             Windows kurulum paketi ve kalıcı sertifika ile imzalanmış Android APK birlikte yayımlandı.
             Her dosyanın SHA-256 özeti yanında bulunur. Uygulama içi güncelleme bildirimi Supabase üzerinden sunulur.
-          draft: true
+          draft: false
           prerelease: false
           make_latest: true
           overwrite_files: true
