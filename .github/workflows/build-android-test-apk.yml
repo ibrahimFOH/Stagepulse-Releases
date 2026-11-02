@@ -218,10 +218,9 @@ jobs:
           import json, sys
           from pathlib import Path
           data = {"source_sha": sys.argv[1], "version": sys.argv[2], "version_code": int(sys.argv[3])}
+          Path("release-assets/Stagepulse-Ses-Merkezi-Android-TEST-build.json").write_text(
               json.dumps(data, indent=2) + "\n", encoding="utf-8"
-              json.dumps(data, indent=2) + "\\n", encoding="utf-8"
           )
-          PY
 
       - name: APK test artifact yükle
         uses: actions/upload-artifact@v4
