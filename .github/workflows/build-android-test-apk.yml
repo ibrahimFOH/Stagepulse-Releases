@@ -44,7 +44,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          SOURCE_SHA="$(git -C source rev-parse HEAD)"
+          SOURCE_SHA="$(git -C source rev-parse HEAD:android)"
           VERSION_DATA="$(python3 - <<'PY'
           import re
           from pathlib import Path
@@ -113,7 +113,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git -C source rev-parse HEAD)" = "$SOURCE_SHA"
+          test "$(git -C source rev-parse HEAD:android)" = "$SOURCE_SHA"
 
       - name: Python 3.12 kur
         uses: actions/setup-python@v5
