@@ -90,7 +90,7 @@ jobs:
   release-preflight:
     name: Yayın deposu secret ve erişim ön kontrolü
     runs-on: ubuntu-latest
-    continue-on-error: true
+    timeout-minutes: 8
     steps:
       - name: Kaynak depo erişimi ve kalıcı Android imzasını kontrol et
         shell: bash
