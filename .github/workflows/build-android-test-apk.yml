@@ -227,7 +227,6 @@ jobs:
               json.dumps(data, indent=2) + "\n", encoding="utf-8"
           )
           PY
-          )
 
       - name: APK test artifact yükle
         uses: actions/upload-artifact@v4
