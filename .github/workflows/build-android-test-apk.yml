@@ -72,7 +72,7 @@ jobs:
           if gh release download "v$VERSION" --repo "$GITHUB_REPOSITORY" --pattern "Stagepulse-Ses-Merkezi-Android-TEST-build.json" --dir "$RUNNER_TEMP/last-android-build" >/dev/null 2>&1; then
             LAST_SHA="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("source_sha", ""))' "$RUNNER_TEMP/last-android-build/Stagepulse-Ses-Merkezi-Android-TEST-build.json")"
           fi
-          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] || [ "$GITHUB_EVENT_NAME" = "push" ]; then
             CHANGED=true
           elif [ "$SOURCE_SHA" = "$LAST_SHA" ]; then
             CHANGED=false
