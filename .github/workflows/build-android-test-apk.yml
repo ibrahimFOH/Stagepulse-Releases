@@ -1,5 +1,5 @@
 name: Ses Merkezi Android otomatik test APK
-# v4: verify final demo-state labels and race-safe source marker
+# v5: compile and verify the complete Android update bridge
 
 on:
   workflow_dispatch:
@@ -16,7 +16,7 @@ permissions:
   security-events: write
 
 concurrency:
-  group: ses-merkezi-android-test-apk-v4
+  group: ses-merkezi-android-test-apk-v5
   cancel-in-progress: false
 
 jobs:
@@ -138,6 +138,28 @@ jobs:
             test -s "$file"
             node --check "$file"
           done < <(find source/android/app/src/main/assets/ui -type f -name "*.js" -print0)
+
+      - name: Android güncelleme köprüsü ve kurulum güvenliğini denetle
+        shell: bash
+        run: |
+          set -euo pipefail
+          JS="source/android/app/src/main/assets/ui/app.js"
+          KT="source/android/app/src/main/java/com/stagepulse/sesmerkezi/MainActivity.kt"
+          MANIFEST="source/android/app/src/main/AndroidManifest.xml"
+          PATHS="source/android/app/src/main/res/xml/file_paths.xml"
+          grep -Fq "check_updates: () => call('check_updates')" "$JS"
+          grep -Fq "install_update: manifest => call('install_update'" "$JS"
+          grep -Fq '"check_updates" -> return checkMobileAppUpdates()' "$KT"
+          grep -Fq '"install_update" -> return queueMobileAppUpdate' "$KT"
+          grep -Fq 'private fun parseMobileUpdateManifest' "$KT"
+          grep -Fq 'MessageDigest.getInstance("SHA-256")' "$KT"
+          grep -Fq 'REQUEST_INSTALL_PACKAGES' "$MANIFEST"
+          grep -Fq 'name="update_cache" path="updates/"' "$PATHS"
+          if grep -Fq "Android otomatik güncelleme kanalı henüz imzalı dağıtım deposuna bağlanmadı" "$JS"; then
+            echo "Android güncelleme düğmeleri hâlâ devre dışı açıklamasında." >&2
+            exit 1
+          fi
+          echo "ANDROID_UPDATE_BRIDGE_OK"
 
       - name: Kalıcı Android imza sırlarını doğrula
         shell: bash
