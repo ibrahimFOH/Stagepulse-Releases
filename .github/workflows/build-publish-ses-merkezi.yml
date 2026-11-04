@@ -79,6 +79,12 @@ jobs:
           python -m pip install --upgrade pip pip-audit
           pip-audit -r source/windows/requirements.txt
 
+      - name: Python test dosyalarının sözdizimini derle
+        shell: pwsh
+        run: |
+          python -m compileall -q source/windows/tests
+          if ($LASTEXITCODE -ne 0) { throw "Windows Python test dosyalarında sözdizimi hatası var." }
+
       - name: Windows kurulum EXE dosyasını oluştur
         shell: pwsh
         working-directory: source/windows
