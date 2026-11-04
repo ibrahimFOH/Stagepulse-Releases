@@ -1,5 +1,5 @@
 name: Ses Merkezi Android otomatik test APK
-# v6: build signed Android source, phone/tablet UI, and stable-named APK assets
+# v7: complete CodeQL source-root coverage for Android app
 
 on:
   workflow_dispatch:
@@ -16,7 +16,7 @@ permissions:
   security-events: write
 
 concurrency:
-  group: ses-merkezi-android-test-apk-v6
+  group: ses-merkezi-android-test-apk-v7
   cancel-in-progress: false
 
 jobs:
@@ -211,17 +211,18 @@ jobs:
           gradle-version: "8.9"
 
       - name: CodeQL başlat
-        uses: github/codeql-action/init@v3
+        uses: github/codeql-action/init@v4
         with:
           languages: java-kotlin
           queries: security-extended
           build-mode: manual
+          source-root: source
 
       - name: Android birim testlerini ve imzalı APK derlemesini çalıştır
         run: gradle -p source/android --no-daemon clean testDebugUnitTest assembleRelease --stacktrace
 
       - name: CodeQL analizini tamamla
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@v4
         with:
           category: "/language:java-kotlin"
           output: codeql-results
