@@ -1,5 +1,5 @@
 name: Ses Merkezi Android otomatik test APK
-# v5: compile and verify the complete Android update bridge
+# v6: build signed Android source, phone/tablet UI, and stable-named APK assets
 
 on:
   workflow_dispatch:
@@ -16,7 +16,7 @@ permissions:
   security-events: write
 
 concurrency:
-  group: ses-merkezi-android-test-apk-v5
+  group: ses-merkezi-android-test-apk-v6
   cancel-in-progress: false
 
 jobs:
@@ -155,6 +155,9 @@ jobs:
           grep -Fq 'MessageDigest.getInstance("SHA-256")' "$KT"
           grep -Fq 'REQUEST_INSTALL_PACKAGES' "$MANIFEST"
           grep -Fq 'name="update_cache" path="updates/"' "$PATHS"
+          grep -Fq '3.7.4: touch-first phone and tablet layout' source/android/app/src/main/assets/ui/style.css
+          grep -Fq 'new ResizeObserver' "$JS"
+          grep -Fq 'visualViewport' "$JS"
           if grep -Fq "Android otomatik güncelleme kanalı henüz imzalı dağıtım deposuna bağlanmadı" "$JS"; then
             echo "Android güncelleme düğmeleri hâlâ devre dışı açıklamasında." >&2
             exit 1
@@ -239,8 +242,11 @@ jobs:
           grep -q "package: name='com.stagepulse.sesmerkezi' versionCode='$RELEASE_VERSION_CODE' versionName='$RELEASE_VERSION'" <<< "$BADGING"
           mkdir -p release-assets
           APK_NAME="Stagepulse-Ses-Merkezi-Android-$RELEASE_VERSION-TEST.apk"
+          STABLE_APK_NAME="Stagepulse-Ses-Merkezi-Android-$RELEASE_VERSION.apk"
           cp "$APK" "release-assets/$APK_NAME"
+          cp "$APK" "release-assets/$STABLE_APK_NAME"
           (cd release-assets && sha256sum "$APK_NAME" > "$APK_NAME.sha256" && sha256sum -c "$APK_NAME.sha256")
+          (cd release-assets && sha256sum "$STABLE_APK_NAME" > "$STABLE_APK_NAME.sha256" && sha256sum -c "$STABLE_APK_NAME.sha256")
           python3 - "$SOURCE_SHA" "$RELEASE_VERSION" "$RELEASE_VERSION_CODE" <<'PY'
           import json, sys
           from pathlib import Path
@@ -269,5 +275,7 @@ jobs:
           files: |
             release-assets/Stagepulse-Ses-Merkezi-Android-${{ needs.detect.outputs.version }}-TEST.apk
             release-assets/Stagepulse-Ses-Merkezi-Android-${{ needs.detect.outputs.version }}-TEST.apk.sha256
+            release-assets/Stagepulse-Ses-Merkezi-Android-${{ needs.detect.outputs.version }}.apk
+            release-assets/Stagepulse-Ses-Merkezi-Android-${{ needs.detect.outputs.version }}.apk.sha256
             release-assets/Stagepulse-Ses-Merkezi-Android-TEST-build.json
 
