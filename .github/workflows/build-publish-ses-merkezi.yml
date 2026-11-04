@@ -1,4 +1,5 @@
 name: Stagepulse Ses Merkezi kararlı sürümünü oluştur ve yayımla
+# Kaynak dalın güncel HEAD'i için test kanalında tam Windows ve Android CI doğrulaması.
 run-name: Stagepulse Ses Merkezi ${{ github.event.client_payload.release_version || github.event.inputs.release_version || '3.7.5' }} · kaynak CI
 
 on:
