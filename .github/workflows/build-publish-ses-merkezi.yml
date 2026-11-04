@@ -18,7 +18,7 @@ on:
       source_ref:
         description: "Özel kaynak deposunda derlenecek dal veya commit"
         required: true
-        default: "main"
+        default: "feature/wavelab-live-mic-delay"
         type: string
 
 permissions:
