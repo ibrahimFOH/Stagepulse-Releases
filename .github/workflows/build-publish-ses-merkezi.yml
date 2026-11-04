@@ -367,7 +367,7 @@ jobs:
               "release_url": f"https://github.com/ibrahimFOH/Stagepulse-Releases/releases/tag/{tag}",
           }
           Path("latest.json").write_text(
-              json.dumps(manifest, ensure_ascii=False, indent=2) + "\\n",
+              json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
               encoding="utf-8",
           )
           print("LATEST_MANIFEST_OK", version, version_code)
@@ -399,42 +399,48 @@ jobs:
           path: update-index
           persist-credentials: true
 
-      - name: Doğrulanmış güncelleme manifestini otomatik yayımla
+      - name: Doğrulanmış güncelleme manifestini doğru kanala yayımla
         shell: bash
         env:
           RELEASE_VERSION: ${{ github.event.client_payload.release_version || github.event.inputs.release_version || (github.event_name == 'push' && '3.7.5') }}
+          UPDATE_CHANNEL: ${{ github.event_name == 'push' && 'test' || 'stable' }}
         run: |
           set -euo pipefail
           python3 - <<'PY'
           import json, os, re
           from pathlib import Path
           version = os.environ["RELEASE_VERSION"]
+          channel = os.environ["UPDATE_CHANNEL"]
           candidate = json.loads(Path("latest.json").read_text(encoding="utf-8"))
           if candidate.get("version") != version or candidate.get("published") is not True:
               raise SystemExit("Yayımlanacak manifest sürümü veya yayın durumu geçersiz.")
+          if candidate.get("channel") != channel or bool(candidate.get("prerelease")) != (channel == "test"):
+              raise SystemExit("Manifest yayın kanalı olay türüyle uyuşmuyor.")
           for key in ("windows", "android"):
               item = candidate.get(key)
               if not isinstance(item, dict) or not re.fullmatch(r"[a-f0-9]{64}", str(item.get("sha256", ""))):
                   raise SystemExit(f"{key} dağıtım kaydı veya SHA-256 eksik.")
-          index = Path("update-index/latest.json")
-          if index.exists():
+          target_name = "test.json" if channel == "test" else "latest.json"
+          index = Path("update-index") / target_name
+          if channel == "stable" and index.exists():
               current = json.loads(index.read_text(encoding="utf-8"))
               def parts(value): return tuple(int(x) for x in str(value).split("."))
               if parts(current.get("version", "0")) > parts(version):
-                  print("Daha yeni manifest zaten yayımlı; eski sürüm ana manifestin üzerine yazılmadı.")
-                  raise SystemExit(0)
-          index.write_text(json.dumps(candidate, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+                  raise SystemExit("Daha yeni kararlı manifest var; üzerine yazılmadı.")
+          index.write_text(json.dumps(candidate, ensure_ascii=False, indent=2) + "\\n", encoding="utf-8")
+          print("UPDATE_CHANNEL_MANIFEST_OK", channel, version, target_name)
           PY
           cd update-index
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add latest.json
+          git add "$([[ "$UPDATE_CHANNEL" == "test" ]] && echo test.json || echo latest.json)"
           if git diff --cached --quiet; then
-            echo "Ana güncelleme manifesti zaten güncel."
+            echo "İlgili kanal manifesti zaten güncel."
             exit 0
           fi
-          git commit -m "chore(updates): publish verified Ses Merkezi ${RELEASE_VERSION} manifest"
+          git commit -m "chore(updates): publish ${UPDATE_CHANNEL} Ses Merkezi ${RELEASE_VERSION} manifest"
           git push origin HEAD:main
+
       - name: Genel güncelleme manifestini canlı kaynaktan doğrula
         shell: bash
         env:
@@ -442,14 +448,17 @@ jobs:
         run: |
           set -euo pipefail
           manifest_file="$(mktemp)"
+          manifest_name="latest.json"
+          if [ "${{ github.event_name }}" = "push" ]; then manifest_name="test.json"; fi
           trap 'rm -f "$manifest_file"' EXIT
           curl --fail --location --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 15 --max-time 90 \
             --header "Accept: application/json" --header "Cache-Control: no-cache" \
-            "https://raw.githubusercontent.com/ibrahimFOH/Stagepulse-Releases/main/latest.json" --output "$manifest_file"
+            "https://raw.githubusercontent.com/ibrahimFOH/Stagepulse-Releases/main/$manifest_name" --output "$manifest_file"
           python3 - "$manifest_file" "$RELEASE_VERSION" <<'PY'
           import json, re, sys
           from pathlib import Path
           data = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          expected_channel = "test" if sys.argv[2] == "3.7.5" else "stable"
           if data.get("ok") is not True or data.get("published") is not True:
               raise SystemExit("Canlı güncelleme manifesti yayımlanmış değil.")
           def parts(value): return tuple(int(x) for x in str(value).split("."))
@@ -463,5 +472,7 @@ jobs:
                   raise SystemExit(f"Canlı {key} manifest kaydı veya SHA-256 geçersiz.")
               if not str(item.get("url", "")).startswith("https://github.com/ibrahimFOH/Stagepulse-Releases/releases/download/"):
                   raise SystemExit(f"Canlı {key} indirme adresi beklenen GitHub Release kaynağı değil.")
-          print("CANONICAL_UPDATE_MANIFEST_OK", data["version"])
+          if data.get("channel") != expected_channel:
+              raise SystemExit("Canlı manifest kanalı beklenen kanalla eşleşmiyor.")
+          print("CANONICAL_UPDATE_MANIFEST_OK", data["version"], data.get("channel"))
           PY
