@@ -57,16 +57,10 @@ jobs:
               assert re.fullmatch(r"\d+\.\d+\.\d+", version), data
               assert data.get("versionName") == version, data
               assert isinstance(data.get("versionCode"), int) and data["versionCode"] > 0, data
-              windows = data.get("windows")
-              android = data.get("android")
-              assert isinstance(windows, dict) and isinstance(android, dict), data
-              for platform in (windows, android):
-                  assert platform.get("url", "").startswith("https://"), platform
-                  assert re.fullmatch(r"[a-f0-9]{64}", platform.get("sha256", "")), platform
-              assert data.get("url") == windows["url"], data
-              assert data.get("sha256") == windows["sha256"], data
-              assert data.get("apkUrl") == android["url"], data
-              assert data.get("apkSha256") == android["sha256"], data
+              assert data.get("channel") == "stable", data
+              assert data.get("url", "").startswith("https://github.com/ibrahimFOH/Stagepulse-Releases/releases/download/"), data
+              assert data.get("filename", "").endswith(".exe"), data
+              assert re.fullmatch(r"[a-f0-9]{64}", data.get("sha256", "")), data
           else:
               assert isinstance(data.get("message"), str) and data["message"], data
           print("MANIFEST_OK", data.get("version", "henüz yayın yok"))
@@ -95,6 +89,42 @@ jobs:
           assert re.fullmatch(r"[a-f0-9]{64}", data.get("apkSha256", "")), data
           assert data.get("release_url", "").endswith("/releases/tag/v" + version), data
           print("ANDROID_STABLE_MANIFEST_OK", version)
+          PY
+
+      - name: Test ve kararlı kanalların Windows ve Android yanıtlarını doğrula
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="https://itasctyjzyewcykozuex.supabase.co/functions/v1/ses-merkezi-updates"
+          for platform in windows android; do
+            curl --retry 3 --retry-all-errors --retry-delay 2 --fail --silent --show-error \
+              "$BASE?platform=$platform&channel=test" -o "${platform}-test.json"
+          done
+          curl --retry 3 --retry-all-errors --retry-delay 2 --fail --silent --show-error \
+            "$BASE?platform=windows&channel=stable" -o windows-stable.json
+          python3 - <<'PY'
+          import json, re
+          from pathlib import Path
+          for platform in ("windows", "android"):
+              data = json.loads(Path(f"{platform}-test.json").read_text(encoding="utf-8"))
+              assert data.get("ok") is True and data.get("published") is True, data
+              assert data.get("channel") == "test" and data.get("prerelease") is True, data
+              version = data.get("version", "")
+              assert re.fullmatch(r"\d+\.\d+\.\d+", version), data
+              assert data.get("versionCode") == int(version.split(".")[0])*10000 + int(version.split(".")[1])*100 + int(version.split(".")[2]), data
+              url_key, hash_key = (("url", "sha256") if platform == "windows" else ("apkUrl", "apkSha256"))
+              ext = "exe" if platform == "windows" else "apk"
+              expected = f"https://github.com/ibrahimFOH/Stagepulse-Releases/releases/download/v{version}/Stagepulse-Ses-Merkezi-{platform.title()}-{version}.{ext}"
+              assert data.get(url_key) == expected, data
+              assert re.fullmatch(r"[a-f0-9]{64}", data.get(hash_key, "")), data
+              print("TEST_CHANNEL_OK", platform, version)
+          stable = json.loads(Path("windows-stable.json").read_text(encoding="utf-8"))
+          assert stable.get("ok") is True and stable.get("channel") == "stable", stable
+          assert stable.get("prerelease") is not True, stable
+          if stable.get("published"):
+              assert stable.get("url", "").startswith("https://github.com/ibrahimFOH/Stagepulse-Releases/releases/download/"), stable
+              assert re.fullmatch(r"[a-f0-9]{64}", stable.get("sha256", "")), stable
+          print("STABLE_CHANNEL_OK", stable.get("version", "no-windows-release-yet"))
           PY
 
       - name: CORS ve HTTP yöntem sınırlarını denetle
