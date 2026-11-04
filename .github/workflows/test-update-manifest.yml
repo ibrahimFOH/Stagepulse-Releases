@@ -85,17 +85,15 @@ jobs:
           data = json.loads(Path("android-manifest.json").read_text(encoding="utf-8"))
           assert data.get("ok") is True, data
           assert isinstance(data.get("published"), bool), data
-          if data["published"]:
-              version = data.get("version", "")
-              assert re.fullmatch(r"\d+\.\d+\.\d+", version), data
-              assert data.get("versionName") == version, data
-              assert data.get("versionCode") == int(version.split(".")[0])*10000 + int(version.split(".")[1])*100 + int(version.split(".")[2]), data
-              assert data.get("apkUrl", "").startswith("https://github.com/ibrahimFOH/Stagepulse-Releases/releases/download/v" + version + "/Stagepulse-Ses-Merkezi-Android-" + version + ".apk"), data
-              assert re.fullmatch(r"[a-f0-9]{64}", data.get("apkSha256", "")), data
-              assert data.get("release_url", "").endswith("/releases/tag/v" + version), data
-          else:
-              assert "kararlı Android" in data.get("message", ""), data
-          print("ANDROID_MANIFEST_OK", data.get("version", "kararlı Android sürümü bekleniyor"))
+          assert data.get("published") is True, data
+          version = data.get("version", "")
+          assert re.fullmatch(r"\d+\.\d+\.\d+", version), data
+          assert data.get("versionName") == version, data
+          assert data.get("versionCode") == int(version.split(".")[0])*10000 + int(version.split(".")[1])*100 + int(version.split(".")[2]), data
+          assert data.get("apkUrl", "").startswith("https://github.com/ibrahimFOH/Stagepulse-Releases/releases/download/v" + version + "/Stagepulse-Ses-Merkezi-Android-" + version + ".apk"), data
+          assert re.fullmatch(r"[a-f0-9]{64}", data.get("apkSha256", "")), data
+          assert data.get("release_url", "").endswith("/releases/tag/v" + version), data
+          print("ANDROID_STABLE_MANIFEST_OK", version)
           PY
 
       - name: CORS ve HTTP yöntem sınırlarını denetle
