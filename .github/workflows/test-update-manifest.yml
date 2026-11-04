@@ -1,4 +1,5 @@
 name: Güncelleme servisi canlı testi
+# v3: recheck the final stable APK digest after the signed release build
 
 on:
   push:
