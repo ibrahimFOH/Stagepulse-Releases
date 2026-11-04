@@ -149,7 +149,7 @@ jobs:
           PY
           python3 source/android/scripts/verify_assets.py
 
-      - name: JavaScript ve çevrimdışı lisans testlerini çalıştır
+      - name: Android JavaScript ve ortak araç regresyon testlerini çalıştır
         uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -161,7 +161,9 @@ jobs:
             test -s "$file"
             node --check "$file"
           done < <(find source/android/app/src/main/assets/ui -type f -name "*.js" -print0)
-          node source/android/scripts/test_offline_bridge.js
+          node --check source/windows/ui/app.js
+          node --check source/windows/ui/first_party_tools.js
+          node source/windows/tests/test_first_party_tools.js
 
       - name: Java 17 kur
         uses: actions/setup-java@v5
