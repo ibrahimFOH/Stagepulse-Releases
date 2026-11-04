@@ -1,5 +1,5 @@
 name: Stagepulse Ses Merkezi kararlı sürümünü oluştur ve yayımla
-# Kaynak dalın güncel HEAD'i için test kanalında tam Windows ve Android CI doğrulaması.
+# [publish-stable] işaretli workflow commit'i yalnızca doğrulanmış kararlı sürüm yayınını başlatır.
 run-name: Stagepulse Ses Merkezi ${{ github.event.client_payload.release_version || github.event.inputs.release_version || (github.event_name == 'push' && contains(github.event.head_commit.message, '[publish-stable]') && '3.7.6' || '3.7.5') }} · kaynak CI
 
 on:
@@ -12,9 +12,9 @@ on:
   workflow_dispatch:
     inputs:
       release_version:
-        description: "Sürüm numarası, ör. 3.7.5"
+        description: "Sürüm numarası, ör. 3.7.6"
         required: true
-        default: "3.7.5"
+        default: "3.7.6"
         type: string
       source_ref:
         description: "Özel kaynak deposunda derlenecek dal veya commit"
@@ -462,7 +462,7 @@ jobs:
       - name: Genel güncelleme manifestini canlı kaynaktan doğrula
         shell: bash
         env:
-          RELEASE_VERSION: ${{ github.event.client_payload.release_version || github.event.inputs.release_version || '3.7.5' }}
+          RELEASE_VERSION: ${{ github.event.client_payload.release_version || github.event.inputs.release_version || (github.event_name == 'push' && contains(github.event.head_commit.message, '[publish-stable]') && '3.7.6' || '3.7.5') }}
           UPDATE_CHANNEL: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[publish-stable]') && 'stable' || (github.event_name == 'push' && 'test' || 'stable') }}
         run: |
           set -euo pipefail
