@@ -289,7 +289,6 @@ jobs:
   publish:
     name: İki platformu test için taslak sürüm olarak hazırla
     needs: [build-windows, build-android]
-    if: github.event_name != 'push'
     runs-on: ubuntu-latest
     steps:
       - name: Windows dağıtım dosyalarını al
@@ -362,7 +361,9 @@ jobs:
               "filename": items["windows"]["filename"],
               "apkUrl": items["android"]["url"],
               "apkSha256": items["android"]["sha256"],
-              "notes": f"Stagepulse Ses Merkezi {version} kararlı sürümü.",
+              "notes": (f"Stagepulse Ses Merkezi {version} test sürümü." if os.getenv("GITHUB_EVENT_NAME") == "push" else f"Stagepulse Ses Merkezi {version} kararlı sürümü."),
+              "channel": ("test" if os.getenv("GITHUB_EVENT_NAME") == "push" else "stable"),
+              "prerelease": (os.getenv("GITHUB_EVENT_NAME") == "push"),
               "release_url": f"https://github.com/ibrahimFOH/Stagepulse-Releases/releases/tag/{tag}",
           }
           Path("latest.json").write_text(
@@ -377,15 +378,15 @@ jobs:
         with:
           tag_name: v${{ github.event.client_payload.release_version || github.event.inputs.release_version || (github.event_name == 'push' && '3.7.5') }}
           target_commitish: main
-          name: Stagepulse Ses Merkezi ${{ github.event.client_payload.release_version || github.event.inputs.release_version || (github.event_name == 'push' && '3.7.5') }}
+          name: Stagepulse Ses Merkezi ${{ github.event.client_payload.release_version || github.event.inputs.release_version || (github.event_name == 'push' && '3.7.5') }}${{ github.event_name == 'push' && ' (TEST)' || '' }}
           body: |
-            Stagepulse Ses Merkezi ${{ github.event.client_payload.release_version || github.event.inputs.release_version || (github.event_name == 'push' && '3.7.5') }} kararlı sürümü.
+            Stagepulse Ses Merkezi ${{ github.event.client_payload.release_version || github.event.inputs.release_version || (github.event_name == 'push' && '3.7.5') }} ${{ github.event_name == 'push' && 'test sürümüdür.' || 'kararlı sürümüdür.' }}
 
             Windows kurulum paketi ve kalıcı sertifika ile imzalanmış Android APK birlikte yayımlandı.
             Her dosyanın SHA-256 özeti yanında bulunur. Uygulama içi güncelleme bildirimi Supabase üzerinden sunulur.
           draft: false
-          prerelease: false
-          make_latest: true
+          prerelease: ${{ github.event_name == 'push' }}
+          make_latest: ${{ github.event_name != 'push' }}
           overwrite_files: true
           fail_on_unmatched_files: true
           files: |
