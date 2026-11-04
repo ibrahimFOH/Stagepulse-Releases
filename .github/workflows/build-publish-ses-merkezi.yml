@@ -91,10 +91,13 @@ jobs:
         run: |
           $path = "source/windows/Merkez.py"
           $content = Get-Content -LiteralPath $path -Raw
-          $pattern = '(?m)^UPDATE_CHANNEL = "[^"]+"$'
-          if ($content -notmatch $pattern) { throw "Windows güncelleme kanalı sabiti bulunamadı." }
-          $content = [regex]::Replace($content, $pattern, ('UPDATE_CHANNEL = "' + $env:UPDATE_CHANNEL + '"'))
+          $pattern = 'UPDATE_CHANNEL\s*=\s*"[^"]+"'
+          $matches = [regex]::Matches($content, $pattern)
+          if ($matches.Count -ne 1) { throw "Windows güncelleme kanalı sabiti tekil değil. Bulunan: $($matches.Count)" }
+          $content = [regex]::Replace($content, $pattern, ('UPDATE_CHANNEL = "' + $env:UPDATE_CHANNEL + '"'), 1)
+          if ($content -notmatch ('UPDATE_CHANNEL = "' + [regex]::Escape($env:UPDATE_CHANNEL) + '"')) { throw "Windows güncelleme kanalı yazılamadı." }
           [System.IO.File]::WriteAllText((Resolve-Path $path), $content, [System.Text.UTF8Encoding]::new($false))
+          Write-Host "UPDATE_CHANNEL_PATCHED=$env:UPDATE_CHANNEL"
 
       - name: Windows kurulum EXE dosyasını oluştur
         shell: pwsh
