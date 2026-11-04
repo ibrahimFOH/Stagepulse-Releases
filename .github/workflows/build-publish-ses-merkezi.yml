@@ -469,7 +469,7 @@ jobs:
           set -euo pipefail
           manifest_file="$(mktemp)"
           manifest_name="latest.json"
-          if [ "${{ github.event_name }}" = "push" ]; then manifest_name="test.json"; fi
+          if [ "$UPDATE_CHANNEL" = "test" ]; then manifest_name="test.json"; fi
           trap 'rm -f "$manifest_file"' EXIT
           curl --fail --location --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 15 --max-time 90 \
             --header "Accept: application/json" --header "Cache-Control: no-cache" \
