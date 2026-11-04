@@ -1,4 +1,5 @@
 name: Stagepulse Ses Merkezi kararlı sürümünü oluştur ve yayımla
+run-name: Stagepulse Ses Merkezi ${{ github.event.client_payload.release_version || github.event.inputs.release_version || '3.7.5' }} · kaynak CI
 
 on:
   push:
@@ -43,6 +44,13 @@ jobs:
           token: ${{ secrets.SOURCE_REPO_READ_TOKEN }}
           path: source
           persist-credentials: false
+
+      - name: Kullanılan özel kaynak commit SHA değerini kaydet
+        shell: pwsh
+        run: |
+          $sourceCommit = git -C source rev-parse HEAD
+          if ($LASTEXITCODE -ne 0) { throw "Özel kaynak commit SHA okunamadı." }
+          Write-Host "Stagepulse source commit: $sourceCommit"
 
       - name: Sürüm numarasını ve üçlü sürüm eşitliğini denetle
         shell: pwsh
@@ -117,6 +125,12 @@ jobs:
           token: ${{ secrets.SOURCE_REPO_READ_TOKEN }}
           path: source
           persist-credentials: false
+
+      - name: Kullanılan özel kaynak commit SHA değerini kaydet
+        shell: bash
+        run: |
+          set -euo pipefail
+          git -C source rev-parse HEAD
 
       - name: Gerekli kalıcı imzalama secrets değerlerini doğrula
         shell: bash
