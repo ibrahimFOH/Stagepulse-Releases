@@ -16,9 +16,13 @@ Her kararlı GitHub Release şu dosyaları içerir:
 
 Uygulamalar sürüm ve dosya bütünlüğü bilgisini Stagepulse Supabase Edge Function üzerinden alır:
 
-`https://itasctyjzyewcykozuex.supabase.co/functions/v1/ses-merkezi-updates`
+- Windows kararlı kanal: `https://itasctyjzyewcykozuex.supabase.co/functions/v1/ses-merkezi-updates?platform=windows&channel=stable`
+- Android kararlı kanal: `https://itasctyjzyewcykozuex.supabase.co/functions/v1/ses-merkezi-updates?platform=android&channel=stable`
+- Test kanalı için aynı adreslerde `channel=test` kullanılır. Kanal belirtilmezse `stable` varsayılır.
 
-Bu uç nokta GitHub Release içindeki sabit `latest.json` dosyasını okur ve sürüm, indirme alan adı, dosya adı ve SHA-256 alanlarını doğrular. GitHub API kotasına bağlı değildir. Lisans, kullanıcı veya yönetim verisi içermez.
+Güncelleme servisi GitHub Release listesinden istenen kanala ait en yeni yayını bulur. Test kanalı yalnızca ön sürümleri, kararlı kanal yalnızca kararlı yayınları döndürür. Platforma ait kurulum dosyası, dosya adı, sürüm, yayın kanalı ve SHA-256 özeti birlikte doğrulanır. Windows ve Android aynı kanal seçimini kullanır. Uygulamalar lisans, kullanıcı veya yönetim verisini bu uç noktadan almaz.
+
+Kararlı sürüm yayımlandığında Stagepulse web indirme alanı en geç 30 dakika içinde kararlı yayını kontrol eder; Windows paketini SHA-256 ile doğrulayıp manifest ve dosyayı birlikte yayımlar. Test ön sürümleri müşterilere sunulan web manifestini değiştirmez.
 
 ## Güvenlik
 
