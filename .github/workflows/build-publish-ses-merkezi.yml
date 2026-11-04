@@ -1,13 +1,9 @@
 name: Stagepulse Ses Merkezi kararlı sürümünü oluştur ve yayımla
 # [publish-stable] işaretli workflow commit'i yalnızca doğrulanmış kararlı sürüm yayınını başlatır.
 # Stagepulse Ses Merkezi 3.7.7: kaynak feature/wavelab-live-mic-delay dalından üretilir.
-run-name: Stagepulse Ses Merkezi ${{ github.event.client_payload.release_version || github.event.inputs.release_version || (github.event_name == 'push' && contains(github.event.head_commit.message, '[publish-stable]') && '3.7.7' || '3.7.5') }} · kaynak CI
+run-name: Stagepulse Ses Merkezi ${{ github.event.client_payload.release_version || github.event.inputs.release_version || (github.event_name == 'push' && contains(github.event.head_commit.message, '[publish-stable]') && '3.7.7' || '3.7.7') }} · kaynak CI
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - ".github/workflows/build-publish-ses-merkezi.yml"
   repository_dispatch:
     types: [ses-merkezi-release]
   workflow_dispatch:
@@ -36,7 +32,7 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 60
     env:
-      RELEASE_VERSION: ${{ github.event.client_payload.release_version || github.event.inputs.release_version || (github.event_name == 'push' && contains(github.event.head_commit.message, '[publish-stable]') && '3.7.7' || (github.event_name == 'push' && '3.7.5')) }}
+      RELEASE_VERSION: ${{ github.event.client_payload.release_version || github.event.inputs.release_version || (github.event_name == 'push' && contains(github.event.head_commit.message, '[publish-stable]') && '3.7.7' || (github.event_name == 'push' && '3.7.7')) }}
       UPDATE_CHANNEL: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[publish-stable]') && 'stable' || (github.event_name == 'push' && 'test' || 'stable') }}
     steps:
       - name: Özel kaynak kodunu salt-okunur token ile al
@@ -133,7 +129,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 50
     env:
-      RELEASE_VERSION: ${{ github.event.client_payload.release_version || github.event.inputs.release_version || (github.event_name == 'push' && contains(github.event.head_commit.message, '[publish-stable]') && '3.7.7' || (github.event_name == 'push' && '3.7.5')) }}
+      RELEASE_VERSION: ${{ github.event.client_payload.release_version || github.event.inputs.release_version || (github.event_name == 'push' && contains(github.event.head_commit.message, '[publish-stable]') && '3.7.7' || (github.event_name == 'push' && '3.7.7')) }}
       UPDATE_CHANNEL: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[publish-stable]') && 'stable' || (github.event_name == 'push' && 'test' || 'stable') }}
       ANDROID_SIGNING_KEYSTORE_BASE64: ${{ secrets.ANDROID_SIGNING_KEYSTORE_BASE64 }}
       ANDROID_SIGNING_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -325,7 +321,7 @@ jobs:
       - name: Her iki paketin SHA-256 özetini yeniden doğrula
         shell: bash
         env:
-          RELEASE_VERSION: ${{ github.event.client_payload.release_version || github.event.inputs.release_version || (github.event_name == 'push' && contains(github.event.head_commit.message, '[publish-stable]') && '3.7.7' || (github.event_name == 'push' && '3.7.5')) }}
+          RELEASE_VERSION: ${{ github.event.client_payload.release_version || github.event.inputs.release_version || (github.event_name == 'push' && contains(github.event.head_commit.message, '[publish-stable]') && '3.7.7' || (github.event_name == 'push' && '3.7.7')) }}
         run: |
           set -euo pipefail
           for platform in Windows Android; do
@@ -338,7 +334,7 @@ jobs:
       - name: İki platformun doğrulanmış latest.json bildirimini oluştur
         shell: bash
         env:
-          RELEASE_VERSION: ${{ github.event.client_payload.release_version || github.event.inputs.release_version || (github.event_name == 'push' && contains(github.event.head_commit.message, '[publish-stable]') && '3.7.7' || (github.event_name == 'push' && '3.7.5')) }}
+          RELEASE_VERSION: ${{ github.event.client_payload.release_version || github.event.inputs.release_version || (github.event_name == 'push' && contains(github.event.head_commit.message, '[publish-stable]') && '3.7.7' || (github.event_name == 'push' && '3.7.7')) }}
         run: |
           set -euo pipefail
           python3 - <<'PY'
@@ -395,11 +391,11 @@ jobs:
       - name: Aynı sürümü GitHub Release olarak yayımla
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64
         with:
-          tag_name: v${{ github.event.client_payload.release_version || github.event.inputs.release_version || (github.event_name == 'push' && contains(github.event.head_commit.message, '[publish-stable]') && '3.7.7' || (github.event_name == 'push' && '3.7.5')) }}
+          tag_name: v${{ github.event.client_payload.release_version || github.event.inputs.release_version || (github.event_name == 'push' && contains(github.event.head_commit.message, '[publish-stable]') && '3.7.7' || (github.event_name == 'push' && '3.7.7')) }}
           target_commitish: main
-          name: Stagepulse Ses Merkezi ${{ github.event.client_payload.release_version || github.event.inputs.release_version || (github.event_name == 'push' && contains(github.event.head_commit.message, '[publish-stable]') && '3.7.7' || (github.event_name == 'push' && '3.7.5')) }}${{ github.event_name == 'push' && !contains(github.event.head_commit.message, '[publish-stable]') && ' (TEST)' || '' }}
+          name: Stagepulse Ses Merkezi ${{ github.event.client_payload.release_version || github.event.inputs.release_version || (github.event_name == 'push' && contains(github.event.head_commit.message, '[publish-stable]') && '3.7.7' || (github.event_name == 'push' && '3.7.7')) }}${{ github.event_name == 'push' && !contains(github.event.head_commit.message, '[publish-stable]') && ' (TEST)' || '' }}
           body: |
-            Stagepulse Ses Merkezi ${{ github.event.client_payload.release_version || github.event.inputs.release_version || (github.event_name == 'push' && contains(github.event.head_commit.message, '[publish-stable]') && '3.7.7' || (github.event_name == 'push' && '3.7.5')) }} ${{ github.event_name == 'push' && !contains(github.event.head_commit.message, '[publish-stable]') && 'test sürümüdür.' || 'kararlı sürümüdür.' }}
+            Stagepulse Ses Merkezi ${{ github.event.client_payload.release_version || github.event.inputs.release_version || (github.event_name == 'push' && contains(github.event.head_commit.message, '[publish-stable]') && '3.7.7' || (github.event_name == 'push' && '3.7.7')) }} ${{ github.event_name == 'push' && !contains(github.event.head_commit.message, '[publish-stable]') && 'test sürümüdür.' || 'kararlı sürümüdür.' }}
 
             Windows kurulum paketi ve kalıcı sertifika ile imzalanmış Android APK birlikte yayımlandı.
             Her dosyanın SHA-256 özeti yanında bulunur. Uygulama içi güncelleme bildirimi Supabase üzerinden sunulur.
@@ -421,7 +417,7 @@ jobs:
       - name: Doğrulanmış güncelleme manifestini doğru kanala yayımla
         shell: bash
         env:
-          RELEASE_VERSION: ${{ github.event.client_payload.release_version || github.event.inputs.release_version || (github.event_name == 'push' && contains(github.event.head_commit.message, '[publish-stable]') && '3.7.7' || (github.event_name == 'push' && '3.7.5')) }}
+          RELEASE_VERSION: ${{ github.event.client_payload.release_version || github.event.inputs.release_version || (github.event_name == 'push' && contains(github.event.head_commit.message, '[publish-stable]') && '3.7.7' || (github.event_name == 'push' && '3.7.7')) }}
           UPDATE_CHANNEL: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[publish-stable]') && 'stable' || (github.event_name == 'push' && 'test' || 'stable') }}
         run: |
           set -euo pipefail
@@ -463,7 +459,7 @@ jobs:
       - name: Genel güncelleme manifestini canlı kaynaktan doğrula
         shell: bash
         env:
-          RELEASE_VERSION: ${{ github.event.client_payload.release_version || github.event.inputs.release_version || (github.event_name == 'push' && contains(github.event.head_commit.message, '[publish-stable]') && '3.7.7' || '3.7.5') }}
+          RELEASE_VERSION: ${{ github.event.client_payload.release_version || github.event.inputs.release_version || (github.event_name == 'push' && contains(github.event.head_commit.message, '[publish-stable]') && '3.7.7' || '3.7.7') }}
           UPDATE_CHANNEL: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[publish-stable]') && 'stable' || (github.event_name == 'push' && 'test' || 'stable') }}
         run: |
           set -euo pipefail
