@@ -1,5 +1,5 @@
 name: Ses Merkezi Android otomatik test APK
-# v8: publish verified Android-only stable release without touching Windows EXE
+# v9: scan the private Android source checkout as the workspace root with CodeQL
 
 on:
   workflow_dispatch:
@@ -16,7 +16,7 @@ permissions:
   security-events: write
 
 concurrency:
-  group: ses-merkezi-android-test-apk-v8
+  group: ses-merkezi-android-test-apk-v9
   cancel-in-progress: false
 
 jobs:
@@ -38,7 +38,6 @@ jobs:
           repository: ibrahimFOH/Stagepulse-Ses-Merkezi
           ref: main
           token: ${{ secrets.SOURCE_REPO_READ_TOKEN }}
-          path: source
           persist-credentials: false
 
       - name: Son Android kaynak sürümünü denetle
@@ -46,11 +45,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          SOURCE_SHA="$(git -C source rev-parse HEAD:android)"
+          SOURCE_SHA="$(git rev-parse HEAD:android)"
           VERSION_DATA="$(python3 - <<'PY'
           import re
           from pathlib import Path
-          text = Path("source/android/app/build.gradle").read_text(encoding="utf-8")
+          text = Path("android/app/build.gradle").read_text(encoding="utf-8")
           name = re.search(r"\bversionName\s+'([^']+)'", text)
           code = re.search(r"\bversionCode\s+(\d+)", text)
           if not name or not code:
@@ -108,14 +107,13 @@ jobs:
           repository: ibrahimFOH/Stagepulse-Ses-Merkezi
           ref: main
           token: ${{ secrets.SOURCE_REPO_READ_TOKEN }}
-          path: source
           persist-credentials: false
 
       - name: Kaynak commit eşleşmesini doğrula
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git -C source rev-parse HEAD:android)" = "$SOURCE_SHA"
+          test "$(git rev-parse HEAD:android)" = "$SOURCE_SHA"
 
       - name: Python 3.12 kur
         uses: actions/setup-python@v5
@@ -123,7 +121,7 @@ jobs:
           python-version: "3.12"
 
       - name: APK varlıklarını ve eğitim dosyalarını doğrula
-        run: python source/android/scripts/verify_assets.py
+        run: python android/scripts/verify_assets.py
 
       - name: Node.js 22 kur ve tüm Android JavaScript dosyalarını denetle
         uses: actions/setup-node@v4
@@ -137,16 +135,16 @@ jobs:
           while IFS= read -r -d "" file; do
             test -s "$file"
             node --check "$file"
-          done < <(find source/android/app/src/main/assets/ui -type f -name "*.js" -print0)
+          done < <(find android/app/src/main/assets/ui -type f -name "*.js" -print0)
 
       - name: Android güncelleme köprüsü ve kurulum güvenliğini denetle
         shell: bash
         run: |
           set -euo pipefail
-          JS="source/android/app/src/main/assets/ui/app.js"
-          KT="source/android/app/src/main/java/com/stagepulse/sesmerkezi/MainActivity.kt"
-          MANIFEST="source/android/app/src/main/AndroidManifest.xml"
-          PATHS="source/android/app/src/main/res/xml/file_paths.xml"
+          JS="android/app/src/main/assets/ui/app.js"
+          KT="android/app/src/main/java/com/stagepulse/sesmerkezi/MainActivity.kt"
+          MANIFEST="android/app/src/main/AndroidManifest.xml"
+          PATHS="android/app/src/main/res/xml/file_paths.xml"
           grep -Fq "check_updates: () => call('check_updates')" "$JS"
           grep -Fq "install_update: manifest => call('install_update'" "$JS"
           grep -Fq '"check_updates" -> return checkMobileAppUpdates()' "$KT"
@@ -155,7 +153,7 @@ jobs:
           grep -Fq 'MessageDigest.getInstance("SHA-256")' "$KT"
           grep -Fq 'REQUEST_INSTALL_PACKAGES' "$MANIFEST"
           grep -Fq 'name="update_cache" path="updates/"' "$PATHS"
-          grep -Fq '3.7.4: touch-first phone and tablet layout' source/android/app/src/main/assets/ui/style.css
+          grep -Fq '3.7.4: touch-first phone and tablet layout' android/app/src/main/assets/ui/style.css
           grep -Fq 'new ResizeObserver' "$JS"
           grep -Fq 'visualViewport' "$JS"
           if grep -Fq "Android otomatik güncelleme kanalı henüz imzalı dağıtım deposuna bağlanmadı" "$JS"; then
@@ -216,10 +214,9 @@ jobs:
           languages: java-kotlin
           queries: security-extended
           build-mode: manual
-          source-root: source
 
       - name: Android birim testlerini ve imzalı APK derlemesini çalıştır
-        run: gradle -p source/android --no-daemon clean testDebugUnitTest assembleRelease --stacktrace
+        run: gradle -p android --no-daemon clean testDebugUnitTest assembleRelease --stacktrace
 
       - name: CodeQL analizini tamamla
         uses: github/codeql-action/analyze@v4
@@ -232,7 +229,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          APK="source/android/app/build/outputs/apk/release/app-release.apk"
+          APK="android/app/build/outputs/apk/release/app-release.apk"
           test -s "$APK"
           APKSIGNER="$ANDROID_HOME/build-tools/35.0.0/apksigner"
           AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
