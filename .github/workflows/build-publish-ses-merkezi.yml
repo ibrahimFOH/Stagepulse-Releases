@@ -1,7 +1,7 @@
 name: Stagepulse Ses Merkezi kararlı sürümünü oluştur ve yayımla
 # [publish-stable] işaretli workflow commit'i yalnızca doğrulanmış kararlı sürüm yayınını başlatır.
 # Sürüm numarası derlenen özel kaynak dalından otomatik okunur.
-# 3.8.3 test kanalı yayını saha doğrulaması tamamlanana kadar korunur.
+# 3.8.5: Android RTA mikrofon cihaz seçimi yedeği ve doğrulanmış çift platform paketi.
 # Yeniden üretim: kaynak dalındaki tüm 3.8.3 doğrulamaları yeşil committen alınır.
 # EXE, APK ve manifest aynı doğrulanmış kaynak sürümünü kullanır.
 run-name: Stagepulse Ses Merkezi ${{ github.event.client_payload.release_version || github.event.inputs.release_version || 'kaynak sürümü' }} · yayın
