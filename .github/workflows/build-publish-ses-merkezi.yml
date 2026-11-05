@@ -1,6 +1,7 @@
 name: Stagepulse Ses Merkezi kararlı sürümünü oluştur ve yayımla
 # [publish-stable] işaretli workflow commit'i yalnızca doğrulanmış kararlı sürüm yayınını başlatır.
 # Stagepulse Ses Merkezi 3.7.9: kaynak feature/wavelab-live-mic-delay dalından üretilir.
+# Kaynak regresyon testi düzeltmesi sonrası 3.7.9 kararlı derlemesi yeniden çalıştırılır.
 run-name: Stagepulse Ses Merkezi ${{ github.event.client_payload.release_version || github.event.inputs.release_version || (github.event_name == 'push' && contains(github.event.head_commit.message, '[publish-stable]') && '3.7.9' || '3.7.9') }} · kaynak CI
 
 on:
