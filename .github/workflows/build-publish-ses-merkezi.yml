@@ -388,25 +388,94 @@ jobs:
           print("LATEST_MANIFEST_OK", version, version_code)
           PY
 
-      - name: Aynı sürümü GitHub Release olarak yayımla
-        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64
-        with:
-          tag_name: v${{ github.event.client_payload.release_version || github.event.inputs.release_version || (github.event_name == 'push' && contains(github.event.head_commit.message, '[publish-stable]') && '3.7.8' || (github.event_name == 'push' && '3.7.8')) }}
-          target_commitish: main
-          name: Stagepulse Ses Merkezi ${{ github.event.client_payload.release_version || github.event.inputs.release_version || (github.event_name == 'push' && contains(github.event.head_commit.message, '[publish-stable]') && '3.7.8' || (github.event_name == 'push' && '3.7.8')) }}${{ github.event_name == 'push' && !contains(github.event.head_commit.message, '[publish-stable]') && ' (TEST)' || '' }}
-          body: |
-            Stagepulse Ses Merkezi ${{ github.event.client_payload.release_version || github.event.inputs.release_version || (github.event_name == 'push' && contains(github.event.head_commit.message, '[publish-stable]') && '3.7.8' || (github.event_name == 'push' && '3.7.8')) }} ${{ github.event_name == 'push' && !contains(github.event.head_commit.message, '[publish-stable]') && 'test sürümüdür.' || 'kararlı sürümüdür.' }}
+      - name: Taslak Release varlıklarını yükle ve kararlı sürümü yayımla
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ github.event.client_payload.release_version || github.event.inputs.release_version || '3.7.8' }}
+          UPDATE_CHANNEL: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[publish-stable]') && 'stable' || (github.event_name == 'push' && 'test' || 'stable') }}
+        run: |
+          set -euo pipefail
+          tag="v${RELEASE_VERSION}"
+          if [[ ! "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Geçersiz sürüm: $RELEASE_VERSION"
+            exit 1
+          fi
 
-            Windows kurulum paketi ve kalıcı sertifika ile imzalanmış Android APK birlikte yayımlandı.
-            Her dosyanın SHA-256 özeti yanında bulunur. Uygulama içi güncelleme bildirimi Supabase üzerinden sunulur.
-          draft: false
-          prerelease: ${{ github.event_name == 'push' && !contains(github.event.head_commit.message, '[publish-stable]') }}
-          make_latest: ${{ github.event_name != 'push' || contains(github.event.head_commit.message, '[publish-stable]') }}
-          overwrite_files: true
-          fail_on_unmatched_files: true
-          files: |
-            release-assets/*
-            latest.json
+          prerelease=false
+          make_latest=true
+          release_title="Stagepulse Ses Merkezi $RELEASE_VERSION"
+          release_body="Stagepulse Ses Merkezi $RELEASE_VERSION kararlı sürümüdür.
+
+          Windows kurulum paketi ve kalıcı sertifika ile imzalanmış Android APK birlikte yayımlandı.
+          Her dosyanın SHA-256 özeti yanında bulunur. Uygulama içi güncelleme bildirimi Supabase üzerinden sunulur."
+          if [[ "$UPDATE_CHANNEL" == "test" ]]; then
+            prerelease=true
+            make_latest=false
+            release_title="$release_title (TEST)"
+            release_body="Stagepulse Ses Merkezi $RELEASE_VERSION test sürümüdür.
+
+          Bu sürüm kararlı kanalın yerine geçmez."
+          fi
+
+          # Önce aynı etiketli taslağı bul; yoksa tek bir taslak oluştur.
+          release_id="$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            --jq ".[] | select(.tag_name == \"$tag\") | .id" | head -n 1 || true)"
+          if [[ -z "$release_id" ]]; then
+            created="$(gh api --method POST "repos/$GITHUB_REPOSITORY/releases" \
+              -f tag_name="$tag" \
+              -f target_commitish=main \
+              -f name="$release_title" \
+              -f body="$release_body" \
+              -F draft=true \
+              -F prerelease="$prerelease" \
+              -f make_latest=false)"
+            release_id="$(jq -r '.id // empty' <<< "$created")"
+          fi
+          if [[ ! "$release_id" =~ ^[0-9]+$ ]]; then
+            echo "::error::GitHub Release kimliği alınamadı."
+            exit 1
+          fi
+
+          # Eski varlıkları aynı adlarla güvenli biçimde yenile.
+          mapfile -t release_files < <(find release-assets -maxdepth 1 -type f -print | sort)
+          release_files+=("latest.json")
+          if [[ ${#release_files[@]} -ne 5 ]]; then
+            echo "::error::İki platform için tam olarak beş dağıtım dosyası bekleniyordu."
+            printf 'Bulunan dosyalar: %s\n' "${release_files[@]}"
+            exit 1
+          fi
+          gh release upload "$tag" "${release_files[@]}" --clobber --repo "$GITHUB_REPOSITORY"
+
+          # softprops/action-gh-release ile tekrarlayan 'Finalizing release / HttpError'
+          # hatasını atla: mevcut Release kaydını doğrudan GitHub API ile yayımla.
+          gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$release_id" \
+            -f name="$release_title" \
+            -f body="$release_body" \
+            -F draft=false \
+            -F prerelease="$prerelease" \
+            -f make_latest="$make_latest" > "$RUNNER_TEMP/release-published.json"
+
+          gh api "repos/$GITHUB_REPOSITORY/releases/$release_id" > "$RUNNER_TEMP/release-verified.json"
+          jq -e --arg tag "$tag" --argjson prerelease "$prerelease" \
+            '.tag_name == $tag and .draft == false and .prerelease == $prerelease and .published_at != null' \
+            "$RUNNER_TEMP/release-verified.json" >/dev/null
+
+          gh api --paginate "repos/$GITHUB_REPOSITORY/releases/$release_id/assets?per_page=100" \
+            --jq '.[].name' > "$RUNNER_TEMP/release-assets.txt"
+          for required in \
+            "Stagepulse-Ses-Merkezi-Windows-$RELEASE_VERSION.exe" \
+            "Stagepulse-Ses-Merkezi-Windows-$RELEASE_VERSION.exe.sha256" \
+            "Stagepulse-Ses-Merkezi-Android-$RELEASE_VERSION.apk" \
+            "Stagepulse-Ses-Merkezi-Android-$RELEASE_VERSION.apk.sha256" \
+            "latest.json"; do
+            grep -Fqx "$required" "$RUNNER_TEMP/release-assets.txt" || {
+              echo "::error::Yayımlanan Release içinde eksik dosya: $required"
+              exit 1
+            }
+          done
+          gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" >/dev/null
+          echo "RELEASE_PUBLISHED_OK $tag channel=$UPDATE_CHANNEL release_id=$release_id"
       - name: Güncel manifest deposunu ana dala al
         uses: actions/checkout@v4
         with:
