@@ -7,6 +7,7 @@ on:
     paths:
       - "README.md"
       - ".github/workflows/**"
+      - "latest.json"
   workflow_dispatch:
 
 permissions:
@@ -50,7 +51,13 @@ jobs:
           import json, re
           from pathlib import Path
           data = json.loads(Path("manifest.json").read_text(encoding="utf-8"))
+          index = json.loads(Path("latest.json").read_text(encoding="utf-8"))
+          assert index.get("ok") is True and index.get("published") is True, index
+          assert index.get("channel") == "stable" and index.get("prerelease") is False, index
           assert data.get("ok") is True, data
+          assert data.get("version") == index.get("version"), (data, index)
+          assert data.get("url") == index.get("windows", {}).get("url"), (data, index)
+          assert data.get("sha256") == index.get("windows", {}).get("sha256"), (data, index)
           assert isinstance(data.get("published"), bool), data
           if data["published"]:
               version = data.get("version", "")
@@ -78,7 +85,11 @@ jobs:
           import json, re
           from pathlib import Path
           data = json.loads(Path("android-manifest.json").read_text(encoding="utf-8"))
+          index = json.loads(Path("latest.json").read_text(encoding="utf-8"))
           assert data.get("ok") is True, data
+          assert data.get("version") == index.get("version"), (data, index)
+          assert data.get("apkUrl") == index.get("android", {}).get("url"), (data, index)
+          assert data.get("apkSha256") == index.get("android", {}).get("sha256"), (data, index)
           assert isinstance(data.get("published"), bool), data
           assert data.get("published") is True, data
           version = data.get("version", "")
