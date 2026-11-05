@@ -99,6 +99,7 @@ jobs:
         run: |
           python -m compileall -q source/windows
           python -m pip install --upgrade pip pip-audit pytest
+          python -m pip install -r source/windows/requirements.txt
           pip-audit -r source/windows/requirements.txt
 
       - name: Python test dosyalarının sözdizimini derle
