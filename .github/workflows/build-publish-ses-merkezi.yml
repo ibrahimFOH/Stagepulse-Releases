@@ -1,7 +1,6 @@
 name: Stagepulse Ses Merkezi kararlı sürümünü oluştur ve yayımla
 # [publish-stable] işaretli workflow commit'i yalnızca doğrulanmış kararlı sürüm yayınını başlatır.
 # Sürüm numarası derlenen özel kaynak dalından otomatik okunur.
-# 3.8.5: test sözleşmeleri, RTA düzeltmeleri ve paket küçültme sonrası tam çift platform doğrulaması.
 # Yeniden üretim: kaynak dalındaki tüm 3.8.3 doğrulamaları yeşil committen alınır.
 # EXE, APK ve manifest aynı doğrulanmış kaynak sürümünü kullanır.
 run-name: Stagepulse Ses Merkezi ${{ github.event.client_payload.release_version || github.event.inputs.release_version || 'kaynak sürümü' }} · yayın
@@ -37,7 +36,6 @@ concurrency:
 
 jobs:
   build-windows:
-    if: ${{ github.event_name != 'push' || contains(github.event.head_commit.message, '[publish-stable]') || contains(github.event.head_commit.message, '[publish-test]') }}
     name: Windows kurulum EXE ve testleri
     runs-on: windows-latest
     timeout-minutes: 60
@@ -45,7 +43,7 @@ jobs:
       release_version: ${{ steps.source_version.outputs.release_version }}
     env:
       RELEASE_VERSION: ${{ github.event.client_payload.release_version || github.event.inputs.release_version || '' }}
-      UPDATE_CHANNEL: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[publish-stable]') && !contains(github.event.head_commit.message, '[publish-test]') && 'stable' || (github.event_name == 'push' && 'test' || 'stable') }}
+      UPDATE_CHANNEL: stable
     steps:
       - name: Özel kaynak kodunu salt-okunur token ile al
         uses: actions/checkout@v4
@@ -150,7 +148,6 @@ jobs:
           retention-days: 7
 
   build-android:
-    if: ${{ github.event_name != 'push' || contains(github.event.head_commit.message, '[publish-stable]') || contains(github.event.head_commit.message, '[publish-test]') }}
     name: Kalıcı anahtarla imzalı Android APK
     runs-on: ubuntu-latest
     timeout-minutes: 50
@@ -158,7 +155,7 @@ jobs:
       release_version: ${{ steps.source_version.outputs.release_version }}
     env:
       RELEASE_VERSION: ${{ github.event.client_payload.release_version || github.event.inputs.release_version || '' }}
-      UPDATE_CHANNEL: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[publish-stable]') && !contains(github.event.head_commit.message, '[publish-test]') && 'stable' || (github.event_name == 'push' && 'test' || 'stable') }}
+      UPDATE_CHANNEL: stable
 # Depo secret adları: ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD
       ANDROID_SIGNING_KEYSTORE_BASE64: ${{ secrets.ANDROID_SIGNING_KEYSTORE_BASE64 }}
       ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -339,13 +336,12 @@ jobs:
           retention-days: 7
 
   publish:
-    if: ${{ github.event_name != 'push' || contains(github.event.head_commit.message, '[publish-stable]') || contains(github.event.head_commit.message, '[publish-test]') }}
     name: İki platformu doğrula ve ilgili kanalda yayımla
     needs: [build-windows, build-android]
     runs-on: ubuntu-latest
     env:
       RELEASE_VERSION: ${{ needs.build-windows.outputs.release_version }}
-      UPDATE_CHANNEL: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[publish-stable]') && !contains(github.event.head_commit.message, '[publish-test]') && 'stable' || (github.event_name == 'push' && 'test' || 'stable') }}
+      UPDATE_CHANNEL: stable
     steps:
       - name: İki platformun kaynak sürümlerinin aynı olduğunu doğrula
         shell: bash
@@ -430,7 +426,7 @@ jobs:
               "apkSha256": items["android"]["sha256"],
               "notes": f"Stagepulse Ses Merkezi {version} " + os.getenv("UPDATE_CHANNEL", "stable") + " sürümü.",
               "channel": os.getenv("UPDATE_CHANNEL", "stable"),
-              "prerelease": (os.getenv("UPDATE_CHANNEL", "stable") == "test"),
+              "prerelease": False,
               "release_url": f"https://github.com/ibrahimFOH/Stagepulse-Releases/releases/tag/{tag}",
           }
           Path("latest.json").write_text(
@@ -445,7 +441,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_VERSION: ${{ needs.build-windows.outputs.release_version }}
-          UPDATE_CHANNEL: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[publish-stable]') && !contains(github.event.head_commit.message, '[publish-test]') && 'stable' || (github.event_name == 'push' && 'test' || 'stable') }}
+      UPDATE_CHANNEL: stable
         run: |
           set -euo pipefail
           tag="v${RELEASE_VERSION}"
@@ -461,15 +457,6 @@ jobs:
 
           Windows kurulum paketi ve kalıcı sertifika ile imzalanmış Android APK birlikte yayımlandı.
           Her dosyanın SHA-256 özeti yanında bulunur. Uygulama içi güncelleme bildirimi Supabase üzerinden sunulur."
-          if [[ "$UPDATE_CHANNEL" == "test" ]]; then
-            prerelease=true
-            make_latest=false
-            release_title="$release_title (TEST)"
-            release_body="Stagepulse Ses Merkezi $RELEASE_VERSION test sürümüdür.
-
-          Bu sürüm kararlı kanalın yerine geçmez."
-          fi
-
           # Önce aynı etiketli taslağı bul; yoksa tek bir taslak oluştur.
           release_id="$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
             --jq ".[] | select(.tag_name == \"$tag\") | .id" | head -n 1 || true)"
@@ -539,7 +526,7 @@ jobs:
         shell: bash
         env:
           RELEASE_VERSION: ${{ needs.build-windows.outputs.release_version }}
-          UPDATE_CHANNEL: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[publish-stable]') && !contains(github.event.head_commit.message, '[publish-test]') && 'stable' || (github.event_name == 'push' && 'test' || 'stable') }}
+      UPDATE_CHANNEL: stable
         run: |
           set -euo pipefail
           python3 - <<'PY'
@@ -550,13 +537,13 @@ jobs:
           candidate = json.loads(Path("latest.json").read_text(encoding="utf-8"))
           if candidate.get("version") != version or candidate.get("published") is not True:
               raise SystemExit("Yayımlanacak manifest sürümü veya yayın durumu geçersiz.")
-          if candidate.get("channel") != channel or bool(candidate.get("prerelease")) != (channel == "test"):
-              raise SystemExit("Manifest yayın kanalı olay türüyle uyuşmuyor.")
+          if candidate.get("channel") != "stable" or candidate.get("prerelease") is not False:
+              raise SystemExit("Manifest yalnızca kararlı kanal olarak yayımlanabilir.")
           for key in ("windows", "android"):
               item = candidate.get(key)
               if not isinstance(item, dict) or not re.fullmatch(r"[a-f0-9]{64}", str(item.get("sha256", ""))):
                   raise SystemExit(f"{key} dağıtım kaydı veya SHA-256 eksik.")
-          target_name = "test.json" if channel == "test" else "latest.json"
+          target_name = "latest.json"
           index = Path("update-index") / target_name
           if channel == "stable" and index.exists():
               current = json.loads(index.read_text(encoding="utf-8"))
@@ -569,7 +556,7 @@ jobs:
           cd update-index
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add "$([[ "$UPDATE_CHANNEL" == "test" ]] && echo test.json || echo latest.json)"
+          git add latest.json
           if git diff --cached --quiet; then
             echo "İlgili kanal manifesti zaten güncel."
             exit 0
@@ -581,12 +568,11 @@ jobs:
         shell: bash
         env:
           RELEASE_VERSION: ${{ needs.build-windows.outputs.release_version }}
-          UPDATE_CHANNEL: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[publish-stable]') && !contains(github.event.head_commit.message, '[publish-test]') && 'stable' || (github.event_name == 'push' && 'test' || 'stable') }}
+      UPDATE_CHANNEL: stable
         run: |
           set -euo pipefail
           manifest_file="$(mktemp)"
           manifest_name="latest.json"
-          if [ "$UPDATE_CHANNEL" = "test" ]; then manifest_name="test.json"; fi
           trap 'rm -f "$manifest_file"' EXIT
           curl --fail --location --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 15 --max-time 90 \
             --header "Accept: application/json" --header "Cache-Control: no-cache" \
