@@ -272,6 +272,9 @@ jobs:
       - name: İmzalı Android Release APK derle
         run: gradle -p source/android --no-daemon clean testDebugUnitTest assembleRelease --stacktrace
 
+      - name: Yönetim Android WebView uygulamasını derle ve doğrula
+        run: gradle -p source/admin-app/android --no-daemon clean assembleDebug --stacktrace
+
       - name: İmza, sürüm, hizalama ve SHA-256 doğrula
         shell: bash
         run: |
