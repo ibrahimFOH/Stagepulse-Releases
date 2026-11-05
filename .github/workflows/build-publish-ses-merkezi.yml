@@ -42,7 +42,7 @@ jobs:
     outputs:
       release_version: ${{ steps.source_version.outputs.release_version }}
     env:
-      RELEASE_VERSION: ${{ needs.build-windows.outputs.release_version }}
+      RELEASE_VERSION: ${{ github.event.client_payload.release_version || github.event.inputs.release_version || '' }}
       UPDATE_CHANNEL: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[publish-stable]') && 'stable' || (github.event_name == 'push' && 'test' || 'stable') }}
     steps:
       - name: Özel kaynak kodunu salt-okunur token ile al
@@ -155,7 +155,7 @@ jobs:
     outputs:
       release_version: ${{ steps.source_version.outputs.release_version }}
     env:
-      RELEASE_VERSION: ${{ needs.build-windows.outputs.release_version }}
+      RELEASE_VERSION: ${{ github.event.client_payload.release_version || github.event.inputs.release_version || '' }}
       UPDATE_CHANNEL: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[publish-stable]') && 'stable' || (github.event_name == 'push' && 'test' || 'stable') }}
       ANDROID_SIGNING_KEYSTORE_BASE64: ${{ secrets.ANDROID_SIGNING_KEYSTORE_BASE64 }}
       ANDROID_SIGNING_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
