@@ -36,7 +36,7 @@ concurrency:
 
 jobs:
   build-windows:
-    name: Windows kurulum EXE ve testleri
+    name: Windows kurulum EXE ve kaynak doğrulaması
     runs-on: windows-latest
     timeout-minutes: 60
     outputs:
@@ -98,7 +98,7 @@ jobs:
         shell: pwsh
         run: |
           python -m compileall -q source/windows
-          python -m pip install --upgrade pip pip-audit
+          python -m pip install --upgrade pip pip-audit pytest
           pip-audit -r source/windows/requirements.txt
 
       - name: Python test dosyalarının sözdizimini derle
@@ -106,6 +106,12 @@ jobs:
         run: |
           python -m compileall -q source/windows/tests
           if ($LASTEXITCODE -ne 0) { throw "Windows Python test dosyalarında sözdizimi hatası var." }
+
+      - name: Windows Python birim ve regresyon testlerini çalıştır
+        shell: pwsh
+        run: |
+          python -m pytest source/windows/tests -q
+          if ($LASTEXITCODE -ne 0) { throw "Windows Python testleri başarısız." }
 
       - name: Güncelleme kanalını Windows paketine işle
         shell: pwsh
