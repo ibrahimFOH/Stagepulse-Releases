@@ -444,7 +444,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_VERSION: ${{ needs.build-windows.outputs.release_version }}
-      UPDATE_CHANNEL: stable
+          UPDATE_CHANNEL: stable
         run: |
           set -euo pipefail
           tag="v${RELEASE_VERSION}"
