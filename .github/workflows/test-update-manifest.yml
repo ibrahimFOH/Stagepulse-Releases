@@ -1,5 +1,5 @@
 name: Güncelleme servisi canlı testi
-# v3: recheck the final stable APK digest after the signed release build
+# v4: canonical stable/test manifest source with explicit no-store HTTP caching
 
 on:
   push:
@@ -45,7 +45,7 @@ jobs:
           curl --retry 3 --retry-all-errors --retry-delay 2 --fail --silent --show-error \
             --dump-header manifest-headers.txt --header "Accept: application/json" "$URL" -o manifest.json
           grep -qi '^content-type: application/json' manifest-headers.txt
-          grep -qi '^cache-control: public' manifest-headers.txt
+          grep -qi '^cache-control:.*no-store' manifest-headers.txt
           python3 - <<'PY'
           import json, re
           from pathlib import Path
