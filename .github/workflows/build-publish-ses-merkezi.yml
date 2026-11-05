@@ -160,9 +160,9 @@ jobs:
       RELEASE_VERSION: ${{ github.event.client_payload.release_version || github.event.inputs.release_version || '' }}
       UPDATE_CHANNEL: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[publish-stable]') && !contains(github.event.head_commit.message, '[publish-test]') && 'stable' || (github.event_name == 'push' && 'test' || 'stable') }}
       ANDROID_SIGNING_KEYSTORE_BASE64: ${{ secrets.ANDROID_SIGNING_KEYSTORE_BASE64 }}
-      ANDROID_SIGNING_STORE_PASSWORD: ${{ secrets.ANDROID_SIGNING_STORE_PASSWORD }}
-      ANDROID_SIGNING_KEY_ALIAS: ${{ secrets.ANDROID_SIGNING_KEY_ALIAS }}
-      ANDROID_SIGNING_KEY_PASSWORD: ${{ secrets.ANDROID_SIGNING_KEY_PASSWORD }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
     steps:
       - name: Özel kaynak kodunu salt-okunur token ile al
         uses: actions/checkout@v4
@@ -183,7 +183,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for name in ANDROID_SIGNING_KEYSTORE_BASE64 ANDROID_SIGNING_STORE_PASSWORD ANDROID_SIGNING_KEY_ALIAS ANDROID_SIGNING_KEY_PASSWORD; do
+          for name in ANDROID_SIGNING_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
             if [ -z "${!name:-}" ]; then
               echo "::error::Eksik Actions secret: $name"
               exit 1
@@ -261,9 +261,9 @@ jobs:
           test -s "$KEYSTORE"
           {
             echo "ANDROID_KEYSTORE_PATH=$KEYSTORE"
-            echo "ANDROID_KEYSTORE_PASSWORD=$ANDROID_SIGNING_STORE_PASSWORD"
-            echo "ANDROID_KEY_ALIAS=$ANDROID_SIGNING_KEY_ALIAS"
-            echo "ANDROID_KEY_PASSWORD=$ANDROID_SIGNING_KEY_PASSWORD"
+            echo "ANDROID_KEYSTORE_PASSWORD=$ANDROID_KEYSTORE_PASSWORD"
+            echo "ANDROID_KEY_ALIAS=$ANDROID_KEY_ALIAS"
+            echo "ANDROID_KEY_PASSWORD=$ANDROID_KEY_PASSWORD"
           } >> "$GITHUB_ENV"
 
       - name: Gradle 8.9 kur
