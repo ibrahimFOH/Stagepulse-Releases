@@ -1,5 +1,5 @@
 name: Güncelleme servisi canlı testi
-# v4: canonical stable/test manifest source with explicit no-store HTTP caching
+# v5: verify the newly published 3.8.1 stable manifest through the live updater
 
 on:
   push:
