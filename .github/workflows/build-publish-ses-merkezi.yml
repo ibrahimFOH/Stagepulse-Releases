@@ -4,6 +4,12 @@ name: Stagepulse Ses Merkezi kararlı sürümünü oluştur ve yayımla
 run-name: Stagepulse Ses Merkezi ${{ github.event.client_payload.release_version || github.event.inputs.release_version || (github.event_name == 'push' && contains(github.event.head_commit.message, '[publish-stable]') && '3.7.8' || '3.7.8') }} · kaynak CI
 
 on:
+  # Workflow dosyasındaki [publish-stable] commit'i kontrollü dağıtım başlatır.
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/build-publish-ses-merkezi.yml
   repository_dispatch:
     types: [ses-merkezi-release]
   workflow_dispatch:
@@ -28,6 +34,7 @@ concurrency:
 
 jobs:
   build-windows:
+    if: ${{ github.event_name != 'push' || contains(github.event.head_commit.message, '[publish-stable]') }}
     name: Windows kurulum EXE ve testleri
     runs-on: windows-latest
     timeout-minutes: 60
@@ -125,6 +132,7 @@ jobs:
           retention-days: 7
 
   build-android:
+    if: ${{ github.event_name != 'push' || contains(github.event.head_commit.message, '[publish-stable]') }}
     name: Kalıcı anahtarla imzalı Android APK
     runs-on: ubuntu-latest
     timeout-minutes: 50
@@ -300,6 +308,7 @@ jobs:
           retention-days: 7
 
   publish:
+    if: ${{ github.event_name != 'push' || contains(github.event.head_commit.message, '[publish-stable]') }}
     name: İki platformu doğrula ve ilgili kanalda yayımla
     needs: [build-windows, build-android]
     runs-on: ubuntu-latest
