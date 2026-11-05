@@ -1,8 +1,8 @@
 name: Stagepulse Ses Merkezi kararlı sürümünü oluştur ve yayımla
 # [publish-stable] işaretli workflow commit'i yalnızca doğrulanmış kararlı sürüm yayınını başlatır.
-# Stagepulse Ses Merkezi 3.8.0: kaynak feature/wavelab-live-mic-delay dalından üretilir.
-# 3.8.0 kararlı yayın: Windows ve Android ortak motoru sürümle eşitlendi.
-run-name: Stagepulse Ses Merkezi ${{ github.event.client_payload.release_version || github.event.inputs.release_version || (github.event_name == 'push' && contains(github.event.head_commit.message, '[publish-stable]') && '3.8.0' || '3.8.0') }} · kaynak CI
+# Sürüm numarası, derlenen özel kaynak dalından otomatik okunur.
+# EXE, APK ve manifest aynı doğrulanmış sürüm numarasını kullanır.
+run-name: Stagepulse Ses Merkezi ${{ github.event.client_payload.release_version || github.event.inputs.release_version || 'kaynak sürümü' }} · yayın
 
 on:
   # Workflow dosyasındaki [publish-stable] commit'i kontrollü dağıtım başlatır.
@@ -17,8 +17,8 @@ on:
     inputs:
       release_version:
         description: "Sürüm numarası, ör. 3.8.0"
-        required: true
-        default: "3.8.0"
+        required: false
+        default: ""
         type: string
       source_ref:
         description: "Özel kaynak deposunda derlenecek dal veya commit"
@@ -39,8 +39,10 @@ jobs:
     name: Windows kurulum EXE ve testleri
     runs-on: windows-latest
     timeout-minutes: 60
+    outputs:
+      release_version: ${{ steps.source_version.outputs.release_version }}
     env:
-      RELEASE_VERSION: ${{ github.event.client_payload.release_version || github.event.inputs.release_version || (github.event_name == 'push' && contains(github.event.head_commit.message, '[publish-stable]') && '3.8.0' || (github.event_name == 'push' && '3.8.0')) }}
+      RELEASE_VERSION: ${{ github.event.client_payload.release_version || github.event.inputs.release_version || '' }}
       UPDATE_CHANNEL: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[publish-stable]') && 'stable' || (github.event_name == 'push' && 'test' || 'stable') }}
     steps:
       - name: Özel kaynak kodunu salt-okunur token ile al
@@ -59,20 +61,33 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Özel kaynak commit SHA okunamadı." }
           Write-Host "Stagepulse source commit: $sourceCommit"
 
-      - name: Sürüm numarasını ve üçlü sürüm eşitliğini denetle
+      - name: Kaynak sürümünü oku ve EXE sürümünü doğrula
+        id: source_version
         shell: pwsh
         run: |
-          $version = $env:RELEASE_VERSION
-          if ($version -notmatch '^\d+\.\d+\.\d+$') { throw "Geçersiz sürüm numarası: $version" }
           $merkez = [regex]::Match((Get-Content source/windows/Merkez.py -Raw), 'APP_VERSION\s*=\s*"([^"]+)"')
           $installer = [regex]::Match((Get-Content source/windows/EXE_OLUSTUR.ps1 -Raw), '\$version\s*=\s*''([^'']+)''')
-          $android = [regex]::Match((Get-Content source/android/app/build.gradle -Raw), "versionName\s+'([^']+)'")
-          if (-not $merkez.Success -or -not $installer.Success -or -not $android.Success) { throw "Sürüm alanları kaynakta bulunamadı." }
-          if ($merkez.Groups[1].Value -ne $version -or $installer.Groups[1].Value -ne $version -or $android.Groups[1].Value -ne $version) {
-            throw "Sürüm uyuşmazlığı: istenen=$version, Windows=$($merkez.Groups[1].Value), kurucu=$($installer.Groups[1].Value), Android=$($android.Groups[1].Value)"
+          $nsi = [regex]::Match((Get-Content source/windows/setup/StagepulseSesMerkezi.nsi -Raw), '!define\s+VERSION\s+"([^"]+)"')
+          $gradle = Get-Content source/android/app/build.gradle -Raw
+          $android = [regex]::Match($gradle, "versionName\s+'([^']+)'")
+          $code = [regex]::Match($gradle, 'versionCode\s+(\d+)')
+          if (-not $merkez.Success -or -not $installer.Success -or -not $nsi.Success -or -not $android.Success -or -not $code.Success) {
+            throw "Sürüm alanlarından biri kaynakta bulunamadı."
           }
-          "RELEASE_VERSION=$version" >> $env:GITHUB_ENV
-
+          $version = $merkez.Groups[1].Value
+          if ($version -notmatch '^\d+\.\d+\.\d+$') { throw "Kaynak sürüm numarası geçersiz: $version" }
+          $parts = $version.Split('.') | ForEach-Object { [int]$_ }
+          $expectedCode = $parts[0] * 10000 + $parts[1] * 100 + $parts[2]
+          if ($installer.Groups[1].Value -ne $version -or $nsi.Groups[1].Value -ne $version -or
+              $android.Groups[1].Value -ne $version -or [int]$code.Groups[1].Value -ne $expectedCode) {
+            throw "Kaynak sürüm eşitliği bozuk: Windows=$version, kurucu=$($installer.Groups[1].Value), NSIS=$($nsi.Groups[1].Value), Android=$($android.Groups[1].Value), versionCode=$($code.Groups[1].Value)"
+          }
+          if ($env:RELEASE_VERSION -and $env:RELEASE_VERSION -ne $version) {
+            throw "İstenen sürüm $env:RELEASE_VERSION, kaynak sürümü $version ile eşleşmiyor."
+          }
+          Add-Content -Path $env:GITHUB_ENV -Value "RELEASE_VERSION=$version" -Encoding utf8
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "release_version=$version" -Encoding utf8
+          Write-Host "SOURCE_RELEASE_VERSION=$version"
       - name: Python 3.11 x64 kur
         uses: actions/setup-python@v5
         with:
@@ -137,8 +152,10 @@ jobs:
     name: Kalıcı anahtarla imzalı Android APK
     runs-on: ubuntu-latest
     timeout-minutes: 50
+    outputs:
+      release_version: ${{ steps.source_version.outputs.release_version }}
     env:
-      RELEASE_VERSION: ${{ github.event.client_payload.release_version || github.event.inputs.release_version || (github.event_name == 'push' && contains(github.event.head_commit.message, '[publish-stable]') && '3.8.0' || (github.event_name == 'push' && '3.8.0')) }}
+      RELEASE_VERSION: ${{ github.event.client_payload.release_version || github.event.inputs.release_version || '' }}
       UPDATE_CHANNEL: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[publish-stable]') && 'stable' || (github.event_name == 'push' && 'test' || 'stable') }}
       ANDROID_SIGNING_KEYSTORE_BASE64: ${{ secrets.ANDROID_SIGNING_KEYSTORE_BASE64 }}
       ANDROID_SIGNING_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -331,7 +348,7 @@ jobs:
       - name: Her iki paketin SHA-256 özetini yeniden doğrula
         shell: bash
         env:
-          RELEASE_VERSION: ${{ github.event.client_payload.release_version || github.event.inputs.release_version || (github.event_name == 'push' && contains(github.event.head_commit.message, '[publish-stable]') && '3.8.0' || (github.event_name == 'push' && '3.8.0')) }}
+          RELEASE_VERSION: ${{ github.event.client_payload.release_version || github.event.inputs.release_version || '' }}
         run: |
           set -euo pipefail
           for platform in Windows Android; do
@@ -344,7 +361,7 @@ jobs:
       - name: İki platformun doğrulanmış latest.json bildirimini oluştur
         shell: bash
         env:
-          RELEASE_VERSION: ${{ github.event.client_payload.release_version || github.event.inputs.release_version || (github.event_name == 'push' && contains(github.event.head_commit.message, '[publish-stable]') && '3.8.0' || (github.event_name == 'push' && '3.8.0')) }}
+          RELEASE_VERSION: ${{ github.event.client_payload.release_version || github.event.inputs.release_version || '' }}
         run: |
           set -euo pipefail
           python3 - <<'PY'
@@ -496,7 +513,7 @@ jobs:
       - name: Doğrulanmış güncelleme manifestini doğru kanala yayımla
         shell: bash
         env:
-          RELEASE_VERSION: ${{ github.event.client_payload.release_version || github.event.inputs.release_version || (github.event_name == 'push' && contains(github.event.head_commit.message, '[publish-stable]') && '3.8.0' || (github.event_name == 'push' && '3.8.0')) }}
+          RELEASE_VERSION: ${{ github.event.client_payload.release_version || github.event.inputs.release_version || '' }}
           UPDATE_CHANNEL: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[publish-stable]') && 'stable' || (github.event_name == 'push' && 'test' || 'stable') }}
         run: |
           set -euo pipefail
