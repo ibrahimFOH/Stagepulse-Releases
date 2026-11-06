@@ -1,8 +1,7 @@
 name: Stagepulse Ses Merkezi kararlı sürümünü oluştur ve yayımla
 # [publish-stable] işaretli workflow commit'i yalnızca doğrulanmış kararlı sürüm yayınını başlatır.
 # Sürüm numarası derlenen özel kaynak dalından otomatik okunur.
-# 3.8.9: Ana uygulama ve Yönetim Paneli aynı kararlı sürümde üretilir.
-# Ana EXE/APK, Yönetim EXE/APK ve latest.json güncel 3.8.9 ana dal kaynağından doğrulanır.
+# Ana Windows EXE, Android APK ve latest.json aynı kararlı sürümden üretilir.
 run-name: Stagepulse Ses Merkezi ${{ github.event.client_payload.release_version || github.event.inputs.release_version || 'kaynak sürümü' }} · yayın
 
 on:
@@ -154,75 +153,6 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  build-admin-windows:
-    name: Yönetim Windows EXE derlemesi
-    runs-on: windows-latest
-    timeout-minutes: 30
-    outputs:
-      release_version: ${{ steps.version.outputs.release_version }}
-    env:
-      RELEASE_VERSION: ${{ github.event.client_payload.release_version || github.event.inputs.release_version || '' }}
-    steps:
-      - name: Yönetim kaynağını al
-        uses: actions/checkout@v4
-        with:
-          repository: ibrahimFOH/Stagepulse-Ses-Merkezi
-          ref: ${{ github.event.client_payload.source_ref || github.event.inputs.source_ref || 'main' }}
-          token: ${{ secrets.SOURCE_REPO_READ_TOKEN }}
-          path: source
-          persist-credentials: false
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-      - name: Yönetim sürümünü doğrula
-        id: version
-        shell: pwsh
-        run: |
-          $source = Get-Content source/admin-app/desktop/main.py -Raw
-          $gradle = Get-Content source/admin-app/android/app/build.gradle -Raw
-          $desktop = [regex]::Match($source, 'APP_VERSION\s*=\s*"([^"]+)"')
-          $android = [regex]::Match($gradle, "versionName\s+'([^']+)'")
-          $code = [regex]::Match($gradle, 'versionCode\s+(\d+)')
-          if (!$desktop.Success -or !$android.Success -or !$code.Success) { throw "Yönetim sürüm alanları eksik." }
-          $version = $desktop.Groups[1].Value
-          if ($version -notmatch '^\d+\.\d+\.\d+$' -or $android.Groups[1].Value -ne $version) { throw "Yönetim sürüm alanları eşleşmiyor." }
-          if ($env:RELEASE_VERSION -and $env:RELEASE_VERSION -ne $version) { throw "Yönetim sürümü ana sürümle eşleşmiyor." }
-          $parts = $version.Split('.') | ForEach-Object { [int]$_ }
-          $expectedCode = $parts[0] * 10000 + $parts[1] * 100 + $parts[2]
-          if ([int]$code.Groups[1].Value -ne $expectedCode) { throw "Yönetim versionCode sürümle eşleşmiyor." }
-          Add-Content -Path $env:GITHUB_ENV -Value "RELEASE_VERSION=$version"
-          Add-Content -Path $env:GITHUB_OUTPUT -Value "release_version=$version"
-      - name: Bağımlılıkları kur ve JavaScript'i doğrula
-        shell: pwsh
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r source/admin-app/desktop/requirements.txt
-          node --check source/admin-app/desktop/assets/app.js
-      - name: Yönetim Windows EXE derle
-        shell: pwsh
-        run: |
-          pyinstaller --noconfirm --clean --onefile --windowed --name "Stagepulse-Yonetim-Paneli-$env:RELEASE_VERSION" --add-data "source\admin-app\desktop\assets;assets" source/admin-app/desktop/main.py
-          if ($LASTEXITCODE -ne 0) { throw "Yönetim EXE derlemesi başarısız." }
-      - name: Yönetim EXE paketini doğrula ve SHA-256 oluştur
-        shell: pwsh
-        run: |
-          $name = "Stagepulse-Yonetim-Paneli-Windows-$env:RELEASE_VERSION.exe"
-          $built = "dist/Stagepulse-Yonetim-Paneli-$env:RELEASE_VERSION.exe"
-          if (!(Test-Path $built) -or (Get-Item $built).Length -lt 1000000) { throw "Yönetim EXE eksik veya küçük." }
-          New-Item -ItemType Directory -Force -Path release-admin | Out-Null
-          Copy-Item $built "release-admin/$name"
-          $hash = (Get-FileHash -Algorithm SHA256 "release-admin/$name").Hash.ToLowerInvariant()
-          Set-Content -NoNewline -Encoding ascii "release-admin/$name.sha256" "$hash  $name"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: release-admin-windows
-          path: release-admin/*
-          if-no-files-found: error
-          retention-days: 7
-
   build-android:
     name: Kalıcı anahtarla imzalı Android APK
     runs-on: ubuntu-latest
@@ -348,9 +278,6 @@ jobs:
       - name: İmzalı Android Release APK derle
         run: gradle -p source/android --no-daemon clean testDebugUnitTest assembleRelease --stacktrace
 
-      - name: Yönetim Android WebView uygulamasını kalıcı imza anahtarıyla derle
-        run: gradle -p source/admin-app/android --no-daemon clean assembleRelease --stacktrace
-
       - name: İmza, sürüm, hizalama ve SHA-256 doğrula
         shell: bash
         run: |
@@ -406,25 +333,6 @@ jobs:
           printf '%s  %s\n' "$HASH" "$NAME" > "release-assets/$NAME.sha256"
           echo "Android SHA-256: $HASH"
 
-      - name: Yönetim APK imzasını, sürümünü ve SHA-256 değerini doğrula
-        shell: bash
-        run: |
-          set -euo pipefail
-          APK="source/admin-app/android/app/build/outputs/apk/release/app-release.apk"
-          test -s "$APK"
-          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
-          AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)"
-          ZIPALIGN="$(find "$ANDROID_HOME/build-tools" -type f -name zipalign | sort -V | tail -n 1)"
-          "$APKSIGNER" verify --verbose --print-certs "$APK"
-          "$ZIPALIGN" -c -v 4 "$APK"
-          BADGING="$("$AAPT" dump badging "$APK")"
-          grep -Fq "package: name='com.stagepulse.yonetim' versionCode='30809' versionName='$RELEASE_VERSION'" <<< "$BADGING"
-          mkdir -p release-assets
-          NAME="Stagepulse-Yonetim-Paneli-Android-$RELEASE_VERSION.apk"
-          cp "$APK" "release-assets/$NAME"
-          HASH="$(sha256sum "release-assets/$NAME" | awk '{print $1}')"
-          printf '%s  %s\n' "$HASH" "$NAME" > "release-assets/$NAME.sha256"
-
       - name: Android dağıtım dosyalarını sakla
         uses: actions/upload-artifact@v4
         with:
@@ -435,7 +343,7 @@ jobs:
 
   publish:
     name: İki platformu doğrula ve ilgili kanalda yayımla
-    needs: [build-windows, build-android, build-admin-windows]
+    needs: [build-windows, build-android]
     runs-on: ubuntu-latest
     env:
       RELEASE_VERSION: ${{ needs.build-windows.outputs.release_version }}
@@ -464,13 +372,7 @@ jobs:
           name: release-android
           path: release-assets
 
-      - name: Yönetim Windows dağıtım dosyalarını al
-        uses: actions/download-artifact@v4
-        with:
-          name: release-admin-windows
-          path: release-assets
-
-      - name: Dört uygulama paketinin SHA-256 özetini yeniden doğrula
+      - name: Windows ve Android paketlerinin SHA-256 özetini yeniden doğrula
         shell: bash
         env:
           RELEASE_VERSION: ${{ needs.build-windows.outputs.release_version }}
@@ -478,13 +380,11 @@ jobs:
           set -euo pipefail
           for file in \
             "Stagepulse-Ses-Merkezi-Windows-$RELEASE_VERSION.exe" \
-            "Stagepulse-Ses-Merkezi-Android-$RELEASE_VERSION.apk" \
-            "Stagepulse-Yonetim-Paneli-Windows-$RELEASE_VERSION.exe" \
-            "Stagepulse-Yonetim-Paneli-Android-$RELEASE_VERSION.apk"; do
+            "Stagepulse-Ses-Merkezi-Android-$RELEASE_VERSION.apk"; do
             (cd release-assets && sha256sum -c "$file.sha256")
           done
 
-      - name: Dört uygulamanın latest.json bildirimini oluştur
+      - name: Ana uygulamanın latest.json bildirimini oluştur
         shell: bash
         env:
           RELEASE_VERSION: ${{ needs.build-windows.outputs.release_version }}
@@ -502,8 +402,6 @@ jobs:
           specs={
             "windows":f"Stagepulse-Ses-Merkezi-Windows-{version}.exe",
             "android":f"Stagepulse-Ses-Merkezi-Android-{version}.apk",
-            "admin_windows":f"Stagepulse-Yonetim-Paneli-Windows-{version}.exe",
-            "admin_android":f"Stagepulse-Yonetim-Paneli-Android-{version}.apk",
           }
           items={}
           for key,name in specs.items():
@@ -519,7 +417,7 @@ jobs:
             **items,
             "url":items["windows"]["url"],"sha256":items["windows"]["sha256"],"filename":items["windows"]["filename"],
             "apkUrl":items["android"]["url"],"apkSha256":items["android"]["sha256"],
-            "notes":f"Stagepulse Ses Merkezi ve Yönetim Paneli {version} kararlı sürümü.",
+            "notes":f"Stagepulse Ses Merkezi {version} kararlı sürümü.",
             "channel":"stable","prerelease":False,"release_url":f"https://github.com/ibrahimFOH/Stagepulse-Releases/releases/tag/{tag}"
           }
           Path("latest.json").write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
@@ -543,9 +441,9 @@ jobs:
           prerelease=false
           make_latest=true
           release_title="Stagepulse Ses Merkezi $RELEASE_VERSION"
-          release_body="Stagepulse Ses Merkezi ve Yönetim Paneli $RELEASE_VERSION kararlı sürümüdür.
+          release_body="Stagepulse Ses Merkezi $RELEASE_VERSION kararlı sürümüdür.
 
-          Ana Windows kurulum EXE, kalıcı sertifikayla imzalı ana Android APK, Yönetim Windows EXE ve aynı sertifikayla imzalı Yönetim Android APK birlikte yayımlandı. Dört paketin SHA-256 özeti doğrulandı."
+          Windows kurulum EXE ve kalıcı sertifikayla imzalı Android APK birlikte yayımlandı. İki paketin SHA-256 özeti doğrulandı."
           # Önce aynı etiketli taslağı bul; yoksa tek bir taslak oluştur.
           release_id="$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
             --jq ".[] | select(.tag_name == \"$tag\") | .id" | head -n 1 || true)"
@@ -568,8 +466,8 @@ jobs:
           # Eski varlıkları aynı adlarla güvenli biçimde yenile.
           mapfile -t release_files < <(find release-assets -maxdepth 1 -type f -print | sort)
           release_files+=("latest.json")
-          if [[ ${#release_files[@]} -ne 9 ]]; then
-            echo "::error::Dört uygulama paketi, dört SHA-256 ve latest.json olmak üzere dokuz dağıtım dosyası bekleniyordu."
+          if [[ ${#release_files[@]} -ne 5 ]]; then
+            echo "::error::Windows EXE, Android APK, iki SHA-256 ve latest.json olmak üzere beş dağıtım dosyası bekleniyordu."
             printf 'Bulunan dosyalar: %s\n' "${release_files[@]}"
             exit 1
           fi
@@ -596,10 +494,6 @@ jobs:
             "Stagepulse-Ses-Merkezi-Windows-$RELEASE_VERSION.exe.sha256" \
             "Stagepulse-Ses-Merkezi-Android-$RELEASE_VERSION.apk" \
             "Stagepulse-Ses-Merkezi-Android-$RELEASE_VERSION.apk.sha256" \
-            "Stagepulse-Yonetim-Paneli-Windows-$RELEASE_VERSION.exe" \
-            "Stagepulse-Yonetim-Paneli-Windows-$RELEASE_VERSION.exe.sha256" \
-            "Stagepulse-Yonetim-Paneli-Android-$RELEASE_VERSION.apk" \
-            "Stagepulse-Yonetim-Paneli-Android-$RELEASE_VERSION.apk.sha256" \
             "latest.json"; do
             grep -Fqx "$required" "$RUNNER_TEMP/release-assets.txt" || {
               echo "::error::Yayımlanan Release içinde eksik dosya: $required"
@@ -632,7 +526,7 @@ jobs:
               raise SystemExit("Yayımlanacak manifest sürümü veya yayın durumu geçersiz.")
           if candidate.get("channel") != "stable" or candidate.get("prerelease") is not False:
               raise SystemExit("Manifest yalnızca kararlı kanal olarak yayımlanabilir.")
-          for key in ("windows", "android", "admin_windows", "admin_android"):
+          for key in ("windows", "android"):
               item = candidate.get(key)
               if not isinstance(item, dict) or not re.fullmatch(r"[a-f0-9]{64}", str(item.get("sha256", ""))):
                   raise SystemExit(f"{key} dağıtım kaydı veya SHA-256 eksik.")
@@ -682,7 +576,7 @@ jobs:
               raise SystemExit("Canlı güncelleme manifesti yayınlanan sürümün gerisinde.")
           if parts(data.get("version", "0")) > parts(sys.argv[2]):
               print("Daha yeni sürüm zaten yayımlı:", data["version"])
-          for key in ("windows", "android", "admin_windows", "admin_android"):
+          for key in ("windows", "android"):
               item = data.get(key)
               if not isinstance(item, dict) or not re.fullmatch(r"[a-f0-9]{64}", str(item.get("sha256", ""))):
                   raise SystemExit(f"Canlı {key} manifest kaydı veya SHA-256 geçersiz.")
