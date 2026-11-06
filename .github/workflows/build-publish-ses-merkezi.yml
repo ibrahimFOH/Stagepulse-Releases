@@ -343,7 +343,7 @@ jobs:
       - name: Gradle 8.9 kur
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: "8.9"
+          gradle-version: "8.13"
 
       - name: İmzalı Android Release APK derle
         run: gradle -p source/android --no-daemon clean testDebugUnitTest assembleRelease --stacktrace
