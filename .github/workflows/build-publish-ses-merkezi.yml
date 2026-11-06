@@ -463,6 +463,12 @@ jobs:
             exit 1
           fi
 
+          # Eski yayından kalan bağımsız yönetici paketlerini kaldır.
+          while IFS= read -r legacy_asset; do
+            [[ -z "$legacy_asset" ]] && continue
+            gh release delete-asset "$tag" "$legacy_asset" --yes --repo "$GITHUB_REPOSITORY"
+          done < <(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name | select(startswith("Stagepulse-Yonetim-Paneli-"))')
+
           # Eski varlıkları aynı adlarla güvenli biçimde yenile.
           mapfile -t release_files < <(find release-assets -maxdepth 1 -type f -print | sort)
           release_files+=("latest.json")
