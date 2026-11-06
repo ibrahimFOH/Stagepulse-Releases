@@ -1,7 +1,7 @@
 name: Stagepulse Ses Merkezi kararlı sürümünü oluştur ve yayımla
 # [publish-stable] işaretli workflow commit'i yalnızca doğrulanmış kararlı sürüm yayınını başlatır.
 # Sürüm numarası derlenen özel kaynak dalından otomatik okunur.
-# 3.8.8: Android WebView RTA analiz zinciri düzeltmesi ve sürüm eşitliği doğrulanmış kaynak dalından üretilir.
+# 3.8.9: Ana uygulama ve Yönetim Paneli aynı kararlı sürümde üretilir.
 # EXE, APK ve manifest aynı doğrulanmış kaynak sürümünü kullanır.
 run-name: Stagepulse Ses Merkezi ${{ github.event.client_payload.release_version || github.event.inputs.release_version || 'kaynak sürümü' }} · yayın
 
@@ -187,9 +187,14 @@ jobs:
           $android = [regex]::Match($gradle, "versionName\s+'([^']+)'")
           $code = [regex]::Match($gradle, 'versionCode\s+(\d+)')
           if (!$desktop.Success -or !$android.Success -or !$code.Success) { throw "Yönetim sürüm alanları eksik." }
-          if ($desktop.Groups[1].Value -ne $env:RELEASE_VERSION -or $android.Groups[1].Value -ne $env:RELEASE_VERSION) { throw "Yönetim sürümü ana sürümle eşleşmiyor." }
-          if ([int]$code.Groups[1].Value -ne 30809 -or $env:RELEASE_VERSION -ne "3.8.9") { throw "Yönetim versionCode/sürüm geçersiz." }
-          Add-Content -Path $env:GITHUB_OUTPUT -Value "release_version=$env:RELEASE_VERSION"
+          $version = $desktop.Groups[1].Value
+          if ($version -notmatch '^\d+\.\d+\.\d+$' -or $android.Groups[1].Value -ne $version) { throw "Yönetim sürüm alanları eşleşmiyor." }
+          if ($env:RELEASE_VERSION -and $env:RELEASE_VERSION -ne $version) { throw "Yönetim sürümü ana sürümle eşleşmiyor." }
+          $parts = $version.Split('.') | ForEach-Object { [int]$_ }
+          $expectedCode = $parts[0] * 10000 + $parts[1] * 100 + $parts[2]
+          if ([int]$code.Groups[1].Value -ne $expectedCode) { throw "Yönetim versionCode sürümle eşleşmiyor." }
+          Add-Content -Path $env:GITHUB_ENV -Value "RELEASE_VERSION=$version"
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "release_version=$version"
       - name: Bağımlılıkları kur ve JavaScript'i doğrula
         shell: pwsh
         run: |
@@ -403,8 +408,6 @@ jobs:
 
       - name: Yönetim APK imzasını, sürümünü ve SHA-256 değerini doğrula
         shell: bash
-        env:
-          RELEASE_VERSION: ${{ env.RELEASE_VERSION }}
         run: |
           set -euo pipefail
           APK="source/admin-app/android/app/build/outputs/apk/release/app-release.apk"
