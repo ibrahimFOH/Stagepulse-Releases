@@ -14,22 +14,12 @@
     "sha256": "a074e7e621cee2de65322bbffcf05ec17dcc5b66476d30ea6fa5ec660233d9e6",
     "filename": "Stagepulse-Ses-Merkezi-Android-3.8.9.apk"
   },
-  "admin_windows": {
-    "url": "https://github.com/ibrahimFOH/Stagepulse-Releases/releases/download/v3.8.9/Stagepulse-Yonetim-Paneli-Windows-3.8.9.exe",
-    "sha256": "ca1991d8865858f4a5015137250e2cea0ed3f3e7fbcc237755edd10cd1ebe05f",
-    "filename": "Stagepulse-Yonetim-Paneli-Windows-3.8.9.exe"
-  },
-  "admin_android": {
-    "url": "https://github.com/ibrahimFOH/Stagepulse-Releases/releases/download/v3.8.9/Stagepulse-Yonetim-Paneli-Android-3.8.9.apk",
-    "sha256": "0e8c916d4b659ca60edfbf83bfc32697677852ac76c552982825892a6b2ba11f",
-    "filename": "Stagepulse-Yonetim-Paneli-Android-3.8.9.apk"
-  },
   "url": "https://github.com/ibrahimFOH/Stagepulse-Releases/releases/download/v3.8.9/Stagepulse-Ses-Merkezi-Windows-3.8.9.exe",
   "sha256": "aa5f47486f6ee6c0ffc104bb82818474de4e5fcf72e594204e2878fad842d5c3",
   "filename": "Stagepulse-Ses-Merkezi-Windows-3.8.9.exe",
   "apkUrl": "https://github.com/ibrahimFOH/Stagepulse-Releases/releases/download/v3.8.9/Stagepulse-Ses-Merkezi-Android-3.8.9.apk",
   "apkSha256": "a074e7e621cee2de65322bbffcf05ec17dcc5b66476d30ea6fa5ec660233d9e6",
-  "notes": "Stagepulse Ses Merkezi ve Yönetim Paneli 3.8.9 kararlı sürümü.",
+  "notes": "Stagepulse Ses Merkezi 3.8.9 kararlı sürümü.",
   "channel": "stable",
   "prerelease": false,
   "release_url": "https://github.com/ibrahimFOH/Stagepulse-Releases/releases/tag/v3.8.9"
