@@ -44,7 +44,23 @@ jobs:
     env:
       RELEASE_VERSION: ${{ github.event.client_payload.release_version || github.event.inputs.release_version || '' }}
       UPDATE_CHANNEL: stable
+      WINDOWS_SIGNING_CERT_PFX_BASE64: ${{ secrets.WINDOWS_SIGNING_CERT_PFX_BASE64 }}
+      WINDOWS_SIGNING_CERT_PASSWORD: ${{ secrets.WINDOWS_SIGNING_CERT_PASSWORD }}
     steps:
+      - name: Windows Authenticode imza sırlarını doğrula
+        shell: pwsh
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_SIGNING_CERT_PFX_BASE64) -or
+              [string]::IsNullOrWhiteSpace($env:WINDOWS_SIGNING_CERT_PASSWORD)) {
+            throw "Kararlı Windows yayını için WINDOWS_SIGNING_CERT_PFX_BASE64 ve WINDOWS_SIGNING_CERT_PASSWORD secrets zorunludur."
+          }
+          try {
+            $bytes = [Convert]::FromBase64String($env:WINDOWS_SIGNING_CERT_PFX_BASE64)
+            if ($bytes.Length -lt 1024) { throw "PFX içeriği beklenenden küçük." }
+          } catch {
+            throw "Windows imza PFX secret değeri geçerli Base64 değil."
+          }
+
       - name: Özel kaynak kodunu salt-okunur token ile al
         uses: actions/checkout@v4
         with:
@@ -131,6 +147,29 @@ jobs:
         shell: pwsh
         working-directory: source/windows
         run: ./EXE_OLUSTUR.ps1
+
+      - name: Windows kurulum EXE dosyasını Authenticode ile imzala ve doğrula
+        shell: pwsh
+        run: |
+          $files = @(Get-ChildItem -Path source/windows/dist -Filter "*.exe" -File)
+          if ($files.Count -ne 1) { throw "İmzalanacak Windows kurulum EXE sayısı bir olmalı." }
+          $certPath = Join-Path $env:RUNNER_TEMP "stagepulse-windows-signing.pfx"
+          $certBytes = [Convert]::FromBase64String($env:WINDOWS_SIGNING_CERT_PFX_BASE64)
+          [System.IO.File]::WriteAllBytes($certPath, $certBytes)
+          $password = ConvertTo-SecureString $env:WINDOWS_SIGNING_CERT_PASSWORD -AsPlainText -Force
+          $certificate = Get-PfxCertificate -FilePath $certPath -Password $password
+          if (-not $certificate.HasPrivateKey) { throw "Windows imza sertifikasında özel anahtar yok." }
+          if ($certificate.NotAfter -le (Get-Date)) { throw "Windows imza sertifikasının süresi dolmuş." }
+          $signtool = Get-ChildItem -Path "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" -ErrorAction Stop |
+            Sort-Object FullName -Descending | Select-Object -First 1
+          if (-not $signtool) { throw "Windows SDK signtool.exe bulunamadı." }
+          & $signtool.FullName sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /f $certPath /p $env:WINDOWS_SIGNING_CERT_PASSWORD $files[0].FullName
+          if ($LASTEXITCODE -ne 0) { throw "Authenticode imzalama başarısız: $LASTEXITCODE" }
+          $signature = Get-AuthenticodeSignature -LiteralPath $files[0].FullName
+          if ($signature.Status -ne "Valid") { throw "EXE Authenticode imzası doğrulanamadı: $($signature.Status) $($signature.StatusMessage)" }
+          if ($signature.SignerCertificate.Thumbprint -ne $certificate.Thumbprint) { throw "EXE imza sertifikası yüklenen PFX ile eşleşmiyor." }
+          Write-Host "WINDOWS_AUTHENTICODE_OK=$($signature.SignerCertificate.Thumbprint)"
+          Remove-Item -LiteralPath $certPath -Force -ErrorAction SilentlyContinue
 
       - name: Dağıtım dosyasını adlandır ve SHA-256 oluştur
         shell: pwsh
