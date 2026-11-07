@@ -1,5 +1,6 @@
 name: Stagepulse Ses Merkezi kararlı sürümünü oluştur ve yayımla
 # [publish-stable] işaretli workflow commit'i yalnızca doğrulanmış kararlı sürüm yayınını başlatır.
+# [publish-stable] 3.8.9 · Stagepulse-Ses-Merkezi main c7aa457ffcd6e2333d021e233b26cbecb61c173b
 # Sürüm numarası derlenen özel kaynak dalından otomatik okunur.
 # Ana Windows EXE, Android APK ve latest.json aynı kararlı sürümden üretilir.
 run-name: Stagepulse Ses Merkezi ${{ github.event.client_payload.release_version || github.event.inputs.release_version || 'kaynak sürümü' }} · yayın
