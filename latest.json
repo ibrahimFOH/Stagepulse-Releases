@@ -6,19 +6,19 @@
   "versionCode": 30902,
   "windows": {
     "url": "https://github.com/ibrahimFOH/Stagepulse-Releases/releases/download/v3.9.2/Stagepulse-Ses-Merkezi-Windows-3.9.2.exe",
-    "sha256": "b27d3b1cdc3a92035066ac3cd4b06f03298f9cd8750e989dd5ead729f813133b",
+    "sha256": "eeec7860538edf5422cab8a84a2d12c864c57699423a806685f20b11e73c7308",
     "filename": "Stagepulse-Ses-Merkezi-Windows-3.9.2.exe"
   },
   "android": {
     "url": "https://github.com/ibrahimFOH/Stagepulse-Releases/releases/download/v3.9.2/Stagepulse-Ses-Merkezi-Android-3.9.2.apk",
-    "sha256": "2e63d03ba1a66fa89c1dc0eea619a2f8e6ad916ba60f7ca44914b4c86feec200",
+    "sha256": "2eea8e519bc7b1abc14828dc53d217408dbcc62b8776e090ada1672f5528c71c",
     "filename": "Stagepulse-Ses-Merkezi-Android-3.9.2.apk"
   },
   "url": "https://github.com/ibrahimFOH/Stagepulse-Releases/releases/download/v3.9.2/Stagepulse-Ses-Merkezi-Windows-3.9.2.exe",
-  "sha256": "b27d3b1cdc3a92035066ac3cd4b06f03298f9cd8750e989dd5ead729f813133b",
+  "sha256": "eeec7860538edf5422cab8a84a2d12c864c57699423a806685f20b11e73c7308",
   "filename": "Stagepulse-Ses-Merkezi-Windows-3.9.2.exe",
   "apkUrl": "https://github.com/ibrahimFOH/Stagepulse-Releases/releases/download/v3.9.2/Stagepulse-Ses-Merkezi-Android-3.9.2.apk",
-  "apkSha256": "2e63d03ba1a66fa89c1dc0eea619a2f8e6ad916ba60f7ca44914b4c86feec200",
+  "apkSha256": "2eea8e519bc7b1abc14828dc53d217408dbcc62b8776e090ada1672f5528c71c",
   "notes": "Stagepulse Ses Merkezi 3.9.2 kararlı sürümü.",
   "channel": "stable",
   "prerelease": false,
