@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       source_ref:
-        description: "Güncelleme fonksiyonu kaynak dalı veya commit"
+        description: "APK yayın dalındaki güncelleme fonksiyonu kaynak dalı veya commit"
         required: true
-        default: "integration/3.7.0-shared-core-demo"
+        default: "fix/android-release-only-ci"
         type: string
 
 permissions:
