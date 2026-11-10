@@ -126,8 +126,9 @@ jobs:
 
       - name: Windows Python birim ve regresyon testlerini çalıştır
         shell: pwsh
+        working-directory: source/windows
         run: |
-          python -m pytest source/windows/tests -q
+          python -m pytest tests -q
           if ($LASTEXITCODE -ne 0) { throw "Windows Python testleri başarısız." }
 
       - name: Güncelleme kanalını Windows paketine işle
