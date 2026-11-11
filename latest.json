@@ -1,26 +1,26 @@
 {
   "ok": true,
   "published": true,
-  "version": "4.0.2",
-  "versionName": "4.0.2",
-  "versionCode": 40002,
+  "version": "4.0.3",
+  "versionName": "4.0.3",
+  "versionCode": 40003,
   "windows": {
-    "url": "https://github.com/ibrahimFOH/Stagepulse-Releases/releases/download/v4.0.2/Stagepulse-Ses-Merkezi-Windows-4.0.2.exe",
-    "sha256": "fbf50ddcfc312f1fdc43b3dd34b64212421f131535a46e45a65ca5921f207d00",
-    "filename": "Stagepulse-Ses-Merkezi-Windows-4.0.2.exe"
+    "url": "https://github.com/ibrahimFOH/Stagepulse-Releases/releases/download/v4.0.3/Stagepulse-Ses-Merkezi-Windows-4.0.3.exe",
+    "sha256": "0eb7985520c9877df085547e758b8214ca18cf241ac5e6ac05905e3fe4b0c368",
+    "filename": "Stagepulse-Ses-Merkezi-Windows-4.0.3.exe"
   },
   "android": {
-    "url": "https://github.com/ibrahimFOH/Stagepulse-Releases/releases/download/v4.0.2/Stagepulse-Ses-Merkezi-Android-4.0.2.apk",
-    "sha256": "42d42c504ec29a815c9da87ffd4dd3bea109ca6082075799b29d74a3efa9711a",
-    "filename": "Stagepulse-Ses-Merkezi-Android-4.0.2.apk"
+    "url": "https://github.com/ibrahimFOH/Stagepulse-Releases/releases/download/v4.0.3/Stagepulse-Ses-Merkezi-Android-4.0.3.apk",
+    "sha256": "817588477d110c4676e256a679ae88f7450350a4cb48942cab29713024a5defc",
+    "filename": "Stagepulse-Ses-Merkezi-Android-4.0.3.apk"
   },
-  "url": "https://github.com/ibrahimFOH/Stagepulse-Releases/releases/download/v4.0.2/Stagepulse-Ses-Merkezi-Windows-4.0.2.exe",
-  "sha256": "fbf50ddcfc312f1fdc43b3dd34b64212421f131535a46e45a65ca5921f207d00",
-  "filename": "Stagepulse-Ses-Merkezi-Windows-4.0.2.exe",
-  "apkUrl": "https://github.com/ibrahimFOH/Stagepulse-Releases/releases/download/v4.0.2/Stagepulse-Ses-Merkezi-Android-4.0.2.apk",
-  "apkSha256": "42d42c504ec29a815c9da87ffd4dd3bea109ca6082075799b29d74a3efa9711a",
-  "notes": "Stagepulse Ses Merkezi 4.0.2 kararlı sürümü.",
+  "url": "https://github.com/ibrahimFOH/Stagepulse-Releases/releases/download/v4.0.3/Stagepulse-Ses-Merkezi-Windows-4.0.3.exe",
+  "sha256": "0eb7985520c9877df085547e758b8214ca18cf241ac5e6ac05905e3fe4b0c368",
+  "filename": "Stagepulse-Ses-Merkezi-Windows-4.0.3.exe",
+  "apkUrl": "https://github.com/ibrahimFOH/Stagepulse-Releases/releases/download/v4.0.3/Stagepulse-Ses-Merkezi-Android-4.0.3.apk",
+  "apkSha256": "817588477d110c4676e256a679ae88f7450350a4cb48942cab29713024a5defc",
+  "notes": "Stagepulse Ses Merkezi 4.0.3 kararlı sürümü.",
   "channel": "stable",
   "prerelease": false,
-  "release_url": "https://github.com/ibrahimFOH/Stagepulse-Releases/releases/tag/v4.0.2"
+  "release_url": "https://github.com/ibrahimFOH/Stagepulse-Releases/releases/tag/v4.0.3"
 }
