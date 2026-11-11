@@ -6,12 +6,7 @@ name: Stagepulse Ses Merkezi kararlı sürümünü oluştur ve yayımla
 run-name: Stagepulse Ses Merkezi ${{ github.event.client_payload.release_version || github.event.inputs.release_version || 'kaynak sürümü' }} · yayın
 
 on:
-  # Workflow dosyasındaki [publish-stable] commit'i kontrollü dağıtım başlatır.
-  push:
-    branches:
-      - main
-    paths:
-      - .github/workflows/build-publish-ses-merkezi.yml
+  # Kararlı yayın kaynak deposunun doğrulanmış repository_dispatch olayıyla başlatılır.
   repository_dispatch:
     types: [ses-merkezi-release]
   workflow_dispatch:
@@ -500,7 +495,8 @@ jobs:
 
           Windows kurulum EXE ve kalıcı sertifikayla imzalı Android APK birlikte yayımlandı. Paketlerin SHA-256 özetleri doğrulandı."
           if [[ "$MSIX_ENABLED" == "true" ]]; then
-            release_body+=
+            release_body+=" Windows MSIX paketi de yayımlandı. İlk kurulumda Stagepulse MSIX sertifikası güvenilir yayıncılar deposuna eklenmelidir."
+          fi
           # Önce aynı etiketli taslağı bul; yoksa tek bir taslak oluştur.
           release_id="$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
             --jq ".[] | select(.tag_name == \"$tag\") | .id" | head -n 1 || true)"
