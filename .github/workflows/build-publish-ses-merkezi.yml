@@ -36,7 +36,8 @@ concurrency:
 
 jobs:
   build-windows:
-    name: Windows kurulum EXE ve kaynak doğrulaması
+    if: github.event_name != 'push' || contains(github.event.head_commit.message, '[publish-stable]')
+    name: Windows kurulum EXE, MSIX ve kaynak doğrulaması
     runs-on: windows-latest
     timeout-minutes: 60
     outputs:
@@ -165,7 +166,8 @@ jobs:
           [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:MSIX_SIGNING_PFX_BASE64))
           if ((Get-Item -LiteralPath $pfxPath).Length -lt 1000) { throw "MSIX PFX dosyası beklenenden küçük." }
           $outputPath = Join-Path $env:GITHUB_WORKSPACE 'release-assets'
-          & source/windows/MSIX_OLUSTUR.ps1 -PayloadPath 'source/windows/build/payload/StagepulseSesMerkezi' -OutputDirectory $outputPath -CertificatePath $pfxPath -CertificatePassword $env:MSIX_SIGNING_PFX_PASSWORD
+          $payloadPath = Join-Path $env:GITHUB_WORKSPACE 'source\windows\build\payload\StagepulseSesMerkezi'
+          & source/windows/MSIX_OLUSTUR.ps1 -PayloadPath $payloadPath -OutputDirectory $outputPath -CertificatePath $pfxPath -CertificatePassword $env:MSIX_SIGNING_PFX_PASSWORD
           if ($LASTEXITCODE -ne 0) { throw "MSIX_OLUSTUR.ps1 başarısız oldu: $LASTEXITCODE" }
           $package = Join-Path $outputPath "Stagepulse-Ses-Merkezi-MSIX-$env:RELEASE_VERSION.msix"
           if (-not (Test-Path -LiteralPath $package)) { throw "MSIX çıktısı bulunamadı: $package" }
@@ -182,6 +184,7 @@ jobs:
           retention-days: 7
 
   build-android:
+    if: github.event_name != 'push' || contains(github.event.head_commit.message, '[publish-stable]')
     name: Kalıcı anahtarla imzalı Android APK
     runs-on: ubuntu-latest
     timeout-minutes: 50
@@ -370,7 +373,8 @@ jobs:
           retention-days: 7
 
   publish:
-    name: İki platformu doğrula ve ilgili kanalda yayımla
+    if: github.event_name != 'push' || contains(github.event.head_commit.message, '[publish-stable]')
+    name: Windows EXE/MSIX ve Android APK doğrula, yayımla
     needs: [build-windows, build-android]
     runs-on: ubuntu-latest
     env:
@@ -461,7 +465,7 @@ jobs:
               raise SystemExit("MSIX SHA-256 doğrulanamadı.")
             items["msix"]={"url":f"{base}/{name}","sha256":actual,"filename":name,
                            "certificate_url":f"{base}/Stagepulse-MSIX-Signing.cer",
-                           "publisher":"CN=Stagepulse","signing":"self-signed-test-or-managed-certificate"}
+                           "publisher":"CN=Stagepulse","signing":"self-signed-certificate"}
           manifest={
             "ok":True,"published":True,"version":version,"versionName":version,"versionCode":code,
             **items,
