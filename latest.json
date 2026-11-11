@@ -6,19 +6,19 @@
   "versionCode": 40001,
   "windows": {
     "url": "https://github.com/ibrahimFOH/Stagepulse-Releases/releases/download/v4.0.1/Stagepulse-Ses-Merkezi-Windows-4.0.1.exe",
-    "sha256": "a1cd6e1ab11b83c3f7c54bfa7709f7085c5e1f484f41ac60ede0213e1b05e8f7",
+    "sha256": "22cfed0d211abba2fe1ada2853079b98e0b5834f194382276e32629eeca36fbf",
     "filename": "Stagepulse-Ses-Merkezi-Windows-4.0.1.exe"
   },
   "android": {
     "url": "https://github.com/ibrahimFOH/Stagepulse-Releases/releases/download/v4.0.1/Stagepulse-Ses-Merkezi-Android-4.0.1.apk",
-    "sha256": "4652d526accf61bccd1e10864182c0be333b0baa518db5d4088173d5bbe4125d",
+    "sha256": "d881c4514e41f9ae6a2f27772a7fc210e1de015e8a2f48ff5ed0dfd3de4f0710",
     "filename": "Stagepulse-Ses-Merkezi-Android-4.0.1.apk"
   },
   "url": "https://github.com/ibrahimFOH/Stagepulse-Releases/releases/download/v4.0.1/Stagepulse-Ses-Merkezi-Windows-4.0.1.exe",
-  "sha256": "a1cd6e1ab11b83c3f7c54bfa7709f7085c5e1f484f41ac60ede0213e1b05e8f7",
+  "sha256": "22cfed0d211abba2fe1ada2853079b98e0b5834f194382276e32629eeca36fbf",
   "filename": "Stagepulse-Ses-Merkezi-Windows-4.0.1.exe",
   "apkUrl": "https://github.com/ibrahimFOH/Stagepulse-Releases/releases/download/v4.0.1/Stagepulse-Ses-Merkezi-Android-4.0.1.apk",
-  "apkSha256": "4652d526accf61bccd1e10864182c0be333b0baa518db5d4088173d5bbe4125d",
+  "apkSha256": "d881c4514e41f9ae6a2f27772a7fc210e1de015e8a2f48ff5ed0dfd3de4f0710",
   "notes": "Stagepulse Ses Merkezi 4.0.1 kararlı sürümü.",
   "channel": "stable",
   "prerelease": false,
