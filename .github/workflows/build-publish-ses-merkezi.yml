@@ -31,7 +31,7 @@ concurrency:
 
 jobs:
   build-windows:
-    name: Windows kurulum EXE, MSIX ve kaynak doğrulaması
+    name: Windows kurulum EXE ve kaynak doğrulaması
     runs-on: windows-latest
     timeout-minutes: 60
     outputs:
@@ -366,7 +366,7 @@ jobs:
           retention-days: 7
 
   publish:
-    name: Windows EXE/MSIX ve Android APK doğrula, yayımla
+    name: İki platformu doğrula ve ilgili kanalda yayımla
     needs: [build-windows, build-android]
     runs-on: ubuntu-latest
     env:
@@ -663,179 +663,6 @@ jobs:
                   raise SystemExit("Canlı MSIX indirme adresi beklenen sürümle eşleşmiyor.")
               if not str(item.get("certificate_url", "")).endswith("/Stagepulse-MSIX-Signing.cer"):
                   raise SystemExit("Canlı MSIX sertifika adresi geçersiz.")
-          if data.get("channel") != expected_channel:
-              raise SystemExit("Canlı manifest kanalı beklenen kanalla eşleşmiyor.")
-          print("CANONICAL_UPDATE_MANIFEST_OK", data["version"], data.get("channel"))
-          PY
-          WINDOWS_ENDPOINT="$(mktemp)"
-          ANDROID_ENDPOINT="$(mktemp)"
-          trap 'rm -f "$manifest_file" "$WINDOWS_ENDPOINT" "$ANDROID_ENDPOINT"' EXIT
-          BASE="https://itasctyjzyewcykozuex.supabase.co/functions/v1/ses-merkezi-updates"
-          curl --fail --location --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 15 --max-time 60 "$BASE?platform=windows&channel=stable" --output "$WINDOWS_ENDPOINT"
-          curl --fail --location --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 15 --max-time 60 "$BASE?platform=android&channel=stable" --output "$ANDROID_ENDPOINT"
-          python3 - "$WINDOWS_ENDPOINT" "$ANDROID_ENDPOINT" "$RELEASE_VERSION" <<'PY'
-          import json, re, sys
-          from pathlib import Path
-          win = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-          apk = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
-          version = sys.argv[3]
-          for label, item in (("Windows", win), ("Android", apk)):
-              if item.get("ok") is not True or item.get("published") is not True:
-                  raise SystemExit(f"{label} güncelleme uç noktası yayımlanmış sürüm döndürmedi.")
-              if item.get("version") != version or item.get("channel") != "stable" or item.get("prerelease") is not False:
-                  raise SystemExit(f"{label} güncelleme uç noktası sürüm/kanal uyuşmazlığı.")
-          if not re.fullmatch(r"[a-f0-9]{64}", str(win.get("sha256", ""))):
-              raise SystemExit("Windows uç noktası SHA-256 geçersiz.")
-          if not re.fullmatch(r"[a-f0-9]{64}", str(apk.get("apkSha256", ""))):
-              raise SystemExit("Android uç noktası SHA-256 geçersiz.")
-          print("LIVE_UPDATER_ENDPOINTS_OK", version)
-          PY
-\n\nWindows MSIX paketi de yayımlandı. İlk kurulumda Stagepulse MSIX sertifikası güvenilir yayıncılar deposuna eklenmelidir.'
-          fi
-          # Önce aynı etiketli taslağı bul; yoksa tek bir taslak oluştur.
-          release_id="$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
-            --jq ".[] | select(.tag_name == \"$tag\") | .id" | head -n 1 || true)"
-          if [[ -z "$release_id" ]]; then
-            created="$(gh api --method POST "repos/$GITHUB_REPOSITORY/releases" \
-              -f tag_name="$tag" \
-              -f target_commitish=main \
-              -f name="$release_title" \
-              -f body="$release_body" \
-              -F draft=true \
-              -F prerelease="$prerelease" \
-              -f make_latest=false)"
-            release_id="$(jq -r '.id // empty' <<< "$created")"
-          fi
-          if [[ ! "$release_id" =~ ^[0-9]+$ ]]; then
-            echo "::error::GitHub Release kimliği alınamadı."
-            exit 1
-          fi
-
-          # Eski yayından kalan bağımsız yönetici paketlerini kaldır.
-          while IFS= read -r legacy_asset; do
-            [[ -z "$legacy_asset" ]] && continue
-            gh release delete-asset "$tag" "$legacy_asset" --yes --repo "$GITHUB_REPOSITORY"
-          done < <(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name | select(startswith("Stagepulse-Yonetim-Paneli-"))')
-
-          # Eski varlıkları aynı adlarla güvenli biçimde yenile.
-          mapfile -t release_files < <(find release-assets -maxdepth 1 -type f -print | sort)
-          release_files+=("latest.json")
-          if [[ ${#release_files[@]} -ne 5 ]]; then
-            echo "::error::Windows EXE, Android APK, iki SHA-256 ve latest.json olmak üzere beş dağıtım dosyası bekleniyordu."
-            printf 'Bulunan dosyalar: %s\n' "${release_files[@]}"
-            exit 1
-          fi
-          gh release upload "$tag" "${release_files[@]}" --clobber --repo "$GITHUB_REPOSITORY"
-
-          # softprops/action-gh-release ile tekrarlayan 'Finalizing release / HttpError'
-          # hatasını atla: mevcut Release kaydını doğrudan GitHub API ile yayımla.
-          gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$release_id" \
-            -f name="$release_title" \
-            -f body="$release_body" \
-            -F draft=false \
-            -F prerelease="$prerelease" \
-            -f make_latest="$make_latest" > "$RUNNER_TEMP/release-published.json"
-
-          gh api "repos/$GITHUB_REPOSITORY/releases/$release_id" > "$RUNNER_TEMP/release-verified.json"
-          jq -e --arg tag "$tag" --argjson prerelease "$prerelease" \
-            '.tag_name == $tag and .draft == false and .prerelease == $prerelease and .published_at != null' \
-            "$RUNNER_TEMP/release-verified.json" >/dev/null
-
-          gh api --paginate "repos/$GITHUB_REPOSITORY/releases/$release_id/assets?per_page=100" \
-            --jq '.[].name' > "$RUNNER_TEMP/release-assets.txt"
-          for required in \
-            "Stagepulse-Ses-Merkezi-Windows-$RELEASE_VERSION.exe" \
-            "Stagepulse-Ses-Merkezi-Windows-$RELEASE_VERSION.exe.sha256" \
-            "Stagepulse-Ses-Merkezi-Android-$RELEASE_VERSION.apk" \
-            "Stagepulse-Ses-Merkezi-Android-$RELEASE_VERSION.apk.sha256" \
-            "latest.json"; do
-            grep -Fqx "$required" "$RUNNER_TEMP/release-assets.txt" || {
-              echo "::error::Yayımlanan Release içinde eksik dosya: $required"
-              exit 1
-            }
-          done
-          gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" >/dev/null
-          echo "RELEASE_PUBLISHED_OK $tag channel=$UPDATE_CHANNEL release_id=$release_id"
-      - name: Güncel manifest deposunu ana dala al
-        uses: actions/checkout@v4
-        with:
-          ref: main
-          path: update-index
-          persist-credentials: true
-
-      - name: Doğrulanmış güncelleme manifestini doğru kanala yayımla
-        shell: bash
-        env:
-          RELEASE_VERSION: ${{ needs.build-windows.outputs.release_version }}
-          UPDATE_CHANNEL: stable
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          import json, os, re
-          from pathlib import Path
-          version = os.environ["RELEASE_VERSION"]
-          channel = os.environ["UPDATE_CHANNEL"]
-          candidate = json.loads(Path("latest.json").read_text(encoding="utf-8"))
-          if candidate.get("version") != version or candidate.get("published") is not True:
-              raise SystemExit("Yayımlanacak manifest sürümü veya yayın durumu geçersiz.")
-          if candidate.get("channel") != "stable" or candidate.get("prerelease") is not False:
-              raise SystemExit("Manifest yalnızca kararlı kanal olarak yayımlanabilir.")
-          for key in ("windows", "android"):
-              item = candidate.get(key)
-              if not isinstance(item, dict) or not re.fullmatch(r"[a-f0-9]{64}", str(item.get("sha256", ""))):
-                  raise SystemExit(f"{key} dağıtım kaydı veya SHA-256 eksik.")
-          target_name = "latest.json"
-          index = Path("update-index") / target_name
-          if channel == "stable" and index.exists():
-              current = json.loads(index.read_text(encoding="utf-8"))
-              def parts(value): return tuple(int(x) for x in str(value).split("."))
-              if parts(current.get("version", "0")) > parts(version):
-                  raise SystemExit("Daha yeni kararlı manifest var; üzerine yazılmadı.")
-          index.write_text(json.dumps(candidate, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-          print("UPDATE_CHANNEL_MANIFEST_OK", channel, version, target_name)
-          PY
-          cd update-index
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add latest.json
-          if git diff --cached --quiet; then
-            echo "İlgili kanal manifesti zaten güncel."
-            exit 0
-          fi
-          git commit -m "chore(updates): publish ${UPDATE_CHANNEL} Ses Merkezi ${RELEASE_VERSION} manifest"
-          git push origin HEAD:main
-
-      - name: Genel güncelleme manifestini canlı kaynaktan doğrula
-        shell: bash
-        env:
-          RELEASE_VERSION: ${{ needs.build-windows.outputs.release_version }}
-          UPDATE_CHANNEL: stable
-        run: |
-          set -euo pipefail
-          manifest_file="$(mktemp)"
-          manifest_name="latest.json"
-          trap 'rm -f "$manifest_file"' EXIT
-          curl --fail --location --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 15 --max-time 90 \
-            --header "Accept: application/json" --header "Cache-Control: no-cache" \
-            "https://raw.githubusercontent.com/ibrahimFOH/Stagepulse-Releases/main/$manifest_name" --output "$manifest_file"
-          python3 - "$manifest_file" "$RELEASE_VERSION" "$UPDATE_CHANNEL" <<'PY'
-          import json, re, sys
-          from pathlib import Path
-          data = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-          expected_channel = sys.argv[3]
-          if data.get("ok") is not True or data.get("published") is not True:
-              raise SystemExit("Canlı güncelleme manifesti yayımlanmış değil.")
-          def parts(value): return tuple(int(x) for x in str(value).split("."))
-          if parts(data.get("version", "0")) < parts(sys.argv[2]):
-              raise SystemExit("Canlı güncelleme manifesti yayınlanan sürümün gerisinde.")
-          if parts(data.get("version", "0")) > parts(sys.argv[2]):
-              print("Daha yeni sürüm zaten yayımlı:", data["version"])
-          for key in ("windows", "android"):
-              item = data.get(key)
-              if not isinstance(item, dict) or not re.fullmatch(r"[a-f0-9]{64}", str(item.get("sha256", ""))):
-                  raise SystemExit(f"Canlı {key} manifest kaydı veya SHA-256 geçersiz.")
-              if not str(item.get("url", "")).startswith("https://github.com/ibrahimFOH/Stagepulse-Releases/releases/download/"):
-                  raise SystemExit(f"Canlı {key} indirme adresi beklenen GitHub Release kaynağı değil.")
           if data.get("channel") != expected_channel:
               raise SystemExit("Canlı manifest kanalı beklenen kanalla eşleşmiyor.")
           print("CANONICAL_UPDATE_MANIFEST_OK", data["version"], data.get("channel"))
