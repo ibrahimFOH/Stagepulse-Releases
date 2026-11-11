@@ -169,6 +169,19 @@ jobs:
           "msix_enabled=true" >> $env:GITHUB_OUTPUT
           Write-Host "MSIX_BUILD_OK $package" -ForegroundColor Green
 
+      - name: MSIX paketini Windows runner'a kurup kaldırarak doğrula
+        if: steps.msix_signing.outputs.msix_enabled == 'true'
+        shell: powershell
+        env:
+          RELEASE_VERSION: ${{ steps.source_version.outputs.release_version }}
+        run: |
+          $package = Join-Path $env:GITHUB_WORKSPACE "release-assets\Stagepulse-Ses-Merkezi-MSIX-$env:RELEASE_VERSION.msix"
+          Add-AppxPackage -Path $package -ErrorAction Stop
+          $installed = Get-AppxPackage -Name 'Stagepulse.SesMerkezi'
+          if (-not $installed) { throw 'MSIX kurulduktan sonra paket kaydı bulunamadı.' }
+          Remove-AppxPackage -Package $installed.PackageFullName -ErrorAction Stop
+          Write-Host "MSIX_INSTALL_REMOVE_OK $package" -ForegroundColor Green
+
       - name: Windows dağıtım dosyalarını sakla
         uses: actions/upload-artifact@v4
         with:
