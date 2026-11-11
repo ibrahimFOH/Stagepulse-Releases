@@ -6,7 +6,7 @@ on:
       source_ref:
         description: "APK yayın dalındaki güncelleme fonksiyonu kaynak dalı veya commit"
         required: true
-        default: "fix/android-release-only-ci"
+        default: "main"
         type: string
 
 permissions:
