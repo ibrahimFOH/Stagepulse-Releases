@@ -497,6 +497,35 @@ jobs:
           release_body="Stagepulse Ses Merkezi $RELEASE_VERSION kararlı sürümüdür.
 
           Windows kurulum EXE, Microsoft Store gönderimine hazır MSIX, Android APK ve Galaxy Store gönderimine hazır AAB birlikte yayımlandı. Paketlerin SHA-256 özetleri doğrulandı."
+          # Önce aynı etiketli taslağı bul; yoksa tek bir taslak oluştur.
+          release_id="$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            --jq ".[] | select(.tag_name == \"$tag\") | .id" | head -n 1 || true)"
+          if [[ -z "$release_id" ]]; then
+            created="$(gh api --method POST "repos/$GITHUB_REPOSITORY/releases" \
+              -f tag_name="$tag" \
+              -f target_commitish=main \
+              -f name="$release_title" \
+              -f body="$release_body" \
+              -F draft=true \
+              -F prerelease="$prerelease" \
+              -f make_latest=false)"
+            release_id="$(jq -r '.id // empty' <<< "$created")"
+          fi
+          if [[ ! "$release_id" =~ ^[0-9]+$ ]]; then
+            echo "::error::GitHub Release kimliği alınamadı."
+            exit 1
+          fi
+
+          # Eski yayından kalan bağımsız yönetici paketlerini kaldır.
+          while IFS= read -r legacy_asset; do
+            [[ -z "$legacy_asset" ]] && continue
+            gh release delete-asset "$tag" "$legacy_asset" --yes --repo "$GITHUB_REPOSITORY"
+          done < <(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name | select(startswith("Stagepulse-Yonetim-Paneli-"))')
+
+          # Eski varlıkları aynı adlarla güvenli biçimde yenile.
+          mapfile -t release_files < <(find release-assets -maxdepth 1 -type f -print | sort)
+          release_files+=("latest.json")
+          expected_count=9
           if [[ ${#release_files[@]} -ne $expected_count ]]; then
             echo "::error::Dağıtım dosyası sayısı beklenen $expected_count değil."
             printf 'Bulunan dosyalar: %s\n' "${release_files[@]}"
@@ -674,7 +703,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ibrahimFOH/Stagepulse-Ses-Merkezi
-          ref: ${{ github.event.client_payload.source_ref || github.event.inputs.source_ref || 'main' }}
+          ref: main
           token: ${{ secrets.SOURCE_REPO_READ_TOKEN }}
           path: source
           sparse-checkout: windows/ui/assets/stagepulse-icon-256.png
@@ -777,7 +806,7 @@ jobs:
           with Image.open(icon_source) as image:
               image.convert("RGBA").resize((512,512),Image.Resampling.LANCZOS).save(icon,"PNG")
           app={"appName":"Stagepulse Ses Merkezi","packageName":"com.stagepulse.sesmerkezi",
-               "versionName":version}
+               "versionName":version,"updateDesc":f"Stagepulse {version} update"}
           if os.environ.get("XIAOMI_APP_CATEGORY_ID"):
               app["category"]=int(os.environ["XIAOMI_APP_CATEGORY_ID"])
           request_data=json.dumps({"userName":os.environ["XIAOMI_USERNAME"],
