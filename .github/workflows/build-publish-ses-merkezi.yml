@@ -149,7 +149,7 @@ jobs:
         shell: pwsh
         run: |
           $outputPath = Join-Path $env:GITHUB_WORKSPACE 'release-assets'
-          $payloadPath = Join-Path $env:GITHUB_WORKSPACE 'source\\windows\\build\\payload\\StagepulseSesMerkezi'
+          $payloadPath = Join-Path $env:GITHUB_WORKSPACE 'source\windows\build\payload\StagepulseSesMerkezi'
           & source/windows/MSIX_OLUSTUR.ps1 -PayloadPath $payloadPath -OutputDirectory $outputPath -StoreSubmission
           if ($LASTEXITCODE -ne 0) { throw "Store MSIX üretimi başarısız oldu: $LASTEXITCODE" }
           $package = Join-Path $outputPath "Stagepulse-Ses-Merkezi-Store-$env:RELEASE_VERSION.msix"
@@ -157,7 +157,7 @@ jobs:
           if (-not (Test-Path -LiteralPath $package)) { throw "Store MSIX bulunamadı: $package" }
           if ((Get-Item -LiteralPath $package).Length -lt 1000000) { throw "Store MSIX paketi beklenenden küçük." }
           if (-not (Test-Path -LiteralPath $checksum)) { throw "Store MSIX SHA-256 dosyası bulunamadı." }
-          $expected = ((Get-Content -LiteralPath $checksum -Raw).Trim() -split '\\s+')[0].ToLowerInvariant()
+          $expected = ((Get-Content -LiteralPath $checksum -Raw).Trim() -split '\s+')[0].ToLowerInvariant()
           $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $package).Hash.ToLowerInvariant()
           if ($expected -ne $actual) { throw "Store MSIX SHA-256 doğrulaması başarısız." }
           Write-Host "STORE_MSIX_BUILD_VERIFY_OK $package" -ForegroundColor Green
@@ -485,6 +485,16 @@ jobs:
             actual=hashlib.sha256(package.read_bytes()).hexdigest()
             if not re.fullmatch(r"[a-f0-9]{64}",expected) or expected!=actual: raise SystemExit(f"{key} SHA-256 doğrulanamadı.")
             items[key]={"url":f"{base}/{name}","sha256":actual,"filename":name}
+          store_name=f"Stagepulse-Ses-Merkezi-Store-{version}.msix"
+          store_package=Path("release-assets")/store_name
+          store_checksum=Path(str(store_package)+".sha256")
+          if not store_package.is_file() or not store_checksum.is_file():
+            raise SystemExit("Microsoft Store MSIX paketi veya SHA-256 özeti eksik.")
+          store_expected=store_checksum.read_text(encoding="ascii").strip().split()[0].lower()
+          store_actual=hashlib.sha256(store_package.read_bytes()).hexdigest()
+          if not re.fullmatch(r"[a-f0-9]{64}",store_expected) or store_expected!=store_actual:
+            raise SystemExit("Microsoft Store MSIX SHA-256 doğrulanamadı.")
+          items["store_msix"]={"url":f"{base}/{store_name}","sha256":store_actual,"filename":store_name,"signing":"microsoft-store"}
           if os.environ.get("MSIX_ENABLED") == "true":
             name=f"Stagepulse-Ses-Merkezi-MSIX-{version}.msix"
             package=Path("release-assets")/name
@@ -735,3 +745,156 @@ jobs:
               raise SystemExit("Android uç noktası SHA-256 geçersiz.")
           print("LIVE_UPDATER_ENDPOINTS_OK", version)
           PY
+
+  publish-android-stores:
+    name: Android mağazalarına paralel gönderim
+    needs: [build-android, build-windows, publish]
+    if: ${{ needs.publish.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        store: [samsung, huawei, xiaomi]
+    env:
+      RELEASE_VERSION: ${{ needs.build-windows.outputs.release_version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Yayın paketlerini indir
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release download "v$RELEASE_VERSION" --repo "$GITHUB_REPOSITORY" \
+            --pattern "Stagepulse-Ses-Merkezi-Android-$RELEASE_VERSION.apk" \
+            --pattern "Stagepulse-Ses-Merkezi-Android-$RELEASE_VERSION.aab" \
+            --dir packages
+      - name: Özel kaynak deposundan mağaza simgesini al
+        if: ${{ matrix.store == 'xiaomi' && vars.XIAOMI_GETAPPS_ENABLED == 'true' }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ibrahimFOH/Stagepulse-Ses-Merkezi
+          ref: main
+          token: ${{ secrets.SOURCE_REPO_READ_TOKEN }}
+          path: source
+          sparse-checkout: windows/ui/assets/stagepulse-icon-256.png
+          persist-credentials: false
+
+      - name: Samsung Galaxy Store'a AAB yükle ve incelemeye gönder
+        if: ${{ matrix.store == 'samsung' && vars.SAMSUNG_GALAXY_STORE_ENABLED == 'true' }}
+        env:
+          GALAXY_STORE_ACCESS_TOKEN: ${{ secrets.SAMSUNG_ACCESS_TOKEN }}
+          GALAXY_STORE_SERVICE_ACCOUNT_ID: ${{ secrets.SAMSUNG_SERVICE_ACCOUNT_ID }}
+          SAMSUNG_CONTENT_ID: ${{ vars.SAMSUNG_CONTENT_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GALAXY_STORE_ACCESS_TOKEN"
+          test -n "$GALAXY_STORE_SERVICE_ACCOUNT_ID"
+          [[ "$SAMSUNG_CONTENT_ID" =~ ^[0-9]{12}$ ]]
+          gem install fastlane-plugin-galaxystore --no-document
+          cat > Fastfile <<'RUBY'
+          default_platform(:android)
+          platform :android do
+            lane :release do
+              galaxy_store_upload_apk(
+                content_id: ENV.fetch("SAMSUNG_CONTENT_ID"),
+                apk_path: ENV.fetch("AAB_PATH"),
+                gms: "N"
+              )
+              galaxy_store_set_publication_type(
+                content_id: ENV.fetch("SAMSUNG_CONTENT_ID"),
+                publication_type: "01"
+              )
+              galaxy_store_submit_app(content_id: ENV.fetch("SAMSUNG_CONTENT_ID"))
+            end
+          end
+          RUBY
+          AAB_PATH="$PWD/packages/Stagepulse-Ses-Merkezi-Android-$RELEASE_VERSION.aab" \
+            fastlane android release
+          echo "SAMSUNG_GALAXY_STORE_SUBMITTED v$RELEASE_VERSION"
+
+      - name: Huawei AppGallery'ye APK yükleme ve incelemeye gönderim
+        if: ${{ matrix.store == 'huawei' && vars.HUAWEI_APPGALLERY_ENABLED == 'true' }}
+        env:
+          HUAWEI_CLIENT_ID: ${{ secrets.HUAWEI_CLIENT_ID }}
+          HUAWEI_CLIENT_SECRET: ${{ secrets.HUAWEI_CLIENT_SECRET }}
+          HUAWEI_APP_ID: ${{ vars.HUAWEI_APP_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$HUAWEI_CLIENT_ID"
+          test -n "$HUAWEI_CLIENT_SECRET"
+          test -n "$HUAWEI_APP_ID"
+          TOKEN="$(curl --fail --silent --show-error --retry 3 \
+            -H 'Content-Type: application/json' \
+            -d "$(jq -n --arg id "$HUAWEI_CLIENT_ID" --arg secret "$HUAWEI_CLIENT_SECRET" \
+              '{grant_type:"client_credentials",client_id:$id,client_secret:$secret}')" \
+            https://connect-api.cloud.huawei.com/api/oauth2/v1/token | jq -er '.access_token')"
+          APK="Stagepulse-Ses-Merkezi-Android-$RELEASE_VERSION.apk"
+          URL="https://github.com/$GITHUB_REPOSITORY/releases/download/v$RELEASE_VERSION/$APK"
+          BODY="$(jq -n --arg url "$URL" --arg file "$APK" --arg ver "$RELEASE_VERSION" \
+            --arg req "stagepulse-$RELEASE_VERSION" \
+            '{downloadUrl:$url,downloadFileName:$file,requestId:$req,versionName:$ver,releaseType:1,remark:("Stagepulse Ses Merkezi "+$ver+" kararlı sürümü.")}')"
+          RESPONSE="$(curl --fail --silent --show-error --retry 3 \
+            -X POST "https://connect-api.cloud.huawei.com/api/publish/v2/app-submit-with-file?appId=$HUAWEI_APP_ID" \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "client_id: $HUAWEI_CLIENT_ID" \
+            -H 'Content-Type: application/json' -d "$BODY")"
+          echo "$RESPONSE" | jq .
+          echo "$RESPONSE" | jq -e '(.ret == null) or (.ret == "0") or ((.ret|tostring) == "0")' >/dev/null
+          echo "HUAWEI_APPGALLERY_SUBMITTED v$RELEASE_VERSION"
+
+      - name: Xiaomi GetApps'e APK ve simge yükle
+        if: ${{ matrix.store == 'xiaomi' && vars.XIAOMI_GETAPPS_ENABLED == 'true' }}
+        env:
+          XIAOMI_USERNAME: ${{ secrets.XIAOMI_USERNAME }}
+          XIAOMI_API_PASSWORD: ${{ secrets.XIAOMI_API_PASSWORD }}
+          XIAOMI_RSA_PUBLIC_KEY: ${{ secrets.XIAOMI_RSA_PUBLIC_KEY }}
+          XIAOMI_APP_CATEGORY_ID: ${{ vars.XIAOMI_APP_CATEGORY_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$XIAOMI_USERNAME"
+          test -n "$XIAOMI_API_PASSWORD"
+          test -n "$XIAOMI_RSA_PUBLIC_KEY"
+          python -m pip install --quiet requests cryptography
+          python - <<'PY'
+          import hashlib, json, os, pathlib, requests
+          from cryptography.hazmat.primitives import hashes, serialization
+          from cryptography.hazmat.primitives.asymmetric import padding
+          from cryptography.hazmat.backends import default_backend
+          version=os.environ["RELEASE_VERSION"]
+          apk=pathlib.Path("packages")/f"Stagepulse-Ses-Merkezi-Android-{version}.apk"
+          icon=pathlib.Path("source/windows/ui/assets/stagepulse-icon-256.png")
+          if not apk.is_file() or not icon.is_file(): raise SystemExit("Xiaomi APK veya uygulama simgesi eksik.")
+          app={"appName":"Stagepulse Ses Merkezi","packageName":"com.stagepulse.sesmerkezi",
+               "versionName":version,"updateDesc":f"Stagepulse Ses Merkezi {version} güncellemesi."}
+          if os.environ.get("XIAOMI_APP_CATEGORY_ID"):
+              app["category"]=int(os.environ["XIAOMI_APP_CATEGORY_ID"])
+          request_data=json.dumps({"userName":os.environ["XIAOMI_USERNAME"],
+              "synchroType":1,"appInfo":app},ensure_ascii=False,separators=(",",":"))
+          parts=[{"name":"RequestData","hash":hashlib.md5(request_data.encode()).hexdigest()},
+                 {"name":"apk","hash":hashlib.md5(apk.read_bytes()).hexdigest()},
+                 {"name":"icon","hash":hashlib.md5(icon.read_bytes()).hexdigest()}]
+          plain=json.dumps({"sig":parts,"password":os.environ["XIAOMI_API_PASSWORD"]},
+                           ensure_ascii=False,separators=(",",":")).encode()
+          key=serialization.load_pem_public_key(os.environ["XIAOMI_RSA_PUBLIC_KEY"].encode(),backend=default_backend())
+          sig=key.encrypt(plain,padding.PKCS1v15()).hex()
+          with apk.open("rb") as apk_file, icon.open("rb") as icon_file:
+              response=requests.post("https://api.developer.xiaomi.com/devupload/dev/push",
+                  data={"RequestData":request_data,"SIG":sig},
+                  files={"apk":(apk.name,apk_file,"application/vnd.android.package-archive"),
+                         "icon":(icon.name,icon_file,"image/png")},timeout=240)
+          response.raise_for_status()
+          result=response.json()
+          if result.get("result") != 0: raise SystemExit(f"Xiaomi GetApps gönderimi reddedildi: {result}")
+          print("XIAOMI_GETAPPS_SUBMITTED",version,result.get("message",""))
+          PY
+
+      - name: Mağaza hesabı henüz etkin değil
+        if: ${{ (matrix.store == 'samsung' && vars.SAMSUNG_GALAXY_STORE_ENABLED != 'true') || (matrix.store == 'huawei' && vars.HUAWEI_APPGALLERY_ENABLED != 'true') || (matrix.store == 'xiaomi' && vars.XIAOMI_GETAPPS_ENABLED != 'true') }}
+        run: echo "Bu mağaza etkin değil; ilk mağaza kaydı ve Actions secret/variable ayarları bekleniyor."
+
+      - name: Mağaza gönderim özeti
+        if: always()
+        run: echo "store=${{ matrix.store }} version=v$RELEASE_VERSION result=${{ job.status }}"
