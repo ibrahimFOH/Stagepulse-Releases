@@ -32,12 +32,11 @@ concurrency:
 
 jobs:
   build-windows:
-    name: Windows EXE ve Store MSIX üretimi
+    name: Windows EXE ve Microsoft Store MSIX üretimi
     runs-on: windows-latest
     timeout-minutes: 60
     outputs:
       release_version: ${{ steps.source_version.outputs.release_version }}
-      msix_enabled: ${{ steps.msix_signing.outputs.msix_enabled }}
     env:
       RELEASE_VERSION: ${{ github.event.client_payload.release_version || github.event.inputs.release_version || '' }}
       UPDATE_CHANNEL: stable
@@ -163,45 +162,20 @@ jobs:
           if ($expected -ne $actual) { throw "Store MSIX SHA-256 doğrulaması başarısız." }
           $sdk = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\bin'
           $makeAppx = Get-ChildItem -Path $sdk -Filter MakeAppx.exe -Recurse -ErrorAction SilentlyContinue |
-            Where-Object { $_.FullName -match '\\x64\\MakeAppx\.exe
+            Where-Object { $_.FullName -match '\\x64\\MakeAppx\.exe$' } |
+            Sort-Object FullName -Descending | Select-Object -First 1
+          if (-not $makeAppx) { throw "MakeAppx.exe bulunamadı; MSIX manifesti doğrulanamadı." }
+          $verifyDir = Join-Path $env:RUNNER_TEMP 'store-msix-verify'
+          if (Test-Path -LiteralPath $verifyDir) { Remove-Item -LiteralPath $verifyDir -Recurse -Force }
+          & $makeAppx.FullName unpack /p $package /d $verifyDir
+          if ($LASTEXITCODE -ne 0) { throw "Store MSIX açma doğrulaması başarısız." }
+          [xml]$manifest = Get-Content -LiteralPath (Join-Path $verifyDir 'AppxManifest.xml') -Raw
+          $identity = $manifest.Package.Identity
+          if ($identity.Name -ne 'stagepulse.stagepulsesesmerkezi') { throw "Store MSIX Identity Name uyuşmuyor: $($identity.Name)" }
+          if ($identity.Publisher -ne 'CN=8CD6B337-E6A4-4EAB-B0B3-AA17F70913DD') { throw "Store MSIX Publisher uyuşmuyor: $($identity.Publisher)" }
+          if ($identity.Version -ne "$($env:RELEASE_VERSION).0") { throw "Store MSIX sürümü kaynak sürümüyle uyuşmuyor: $($identity.Version)" }
+          Write-Host "STORE_MSIX_BUILD_VERIFY_OK $package" -ForegroundColor Green
 
-      - name: İmzalı MSIX paketini oluştur (kalıcı sertifika tanımlıysa)
-        id: msix_signing
-        shell: pwsh
-        env:
-          MSIX_SIGNING_PFX_BASE64: ${{ secrets.MSIX_SIGNING_PFX_BASE64 }}
-          MSIX_SIGNING_PFX_PASSWORD: ${{ secrets.MSIX_SIGNING_PFX_PASSWORD }}
-        run: |
-          if ([string]::IsNullOrWhiteSpace($env:MSIX_SIGNING_PFX_BASE64) -or [string]::IsNullOrWhiteSpace($env:MSIX_SIGNING_PFX_PASSWORD)) {
-            Write-Warning "MSIX imza secrets değerleri henüz tanımlı değil. EXE/APK yayını korunacak; MSIX bu sürümde atlandı."
-            "msix_enabled=false" >> $env:GITHUB_OUTPUT
-            exit 0
-          }
-          $pfxPath = Join-Path $env:RUNNER_TEMP 'Stagepulse-MSIX.pfx'
-          [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:MSIX_SIGNING_PFX_BASE64))
-          if ((Get-Item -LiteralPath $pfxPath).Length -lt 1000) { throw "MSIX PFX dosyası beklenenden küçük." }
-          $outputPath = Join-Path $env:GITHUB_WORKSPACE 'release-assets'
-          $payloadPath = Join-Path $env:GITHUB_WORKSPACE 'source\windows\build\payload\StagepulseSesMerkezi'
-          & source/windows/MSIX_OLUSTUR.ps1 -PayloadPath $payloadPath -OutputDirectory $outputPath -CertificatePath $pfxPath -CertificatePassword $env:MSIX_SIGNING_PFX_PASSWORD
-          if ($LASTEXITCODE -ne 0) { throw "MSIX_OLUSTUR.ps1 başarısız oldu: $LASTEXITCODE" }
-          $package = Join-Path $outputPath "Stagepulse-Ses-Merkezi-MSIX-$env:RELEASE_VERSION.msix"
-          if (-not (Test-Path -LiteralPath $package)) { throw "MSIX çıktısı bulunamadı: $package" }
-          if ((Get-Item -LiteralPath $package).Length -lt 1000000) { throw "MSIX paketi beklenenden küçük." }
-          "msix_enabled=true" >> $env:GITHUB_OUTPUT
-          Write-Host "MSIX_BUILD_OK $package" -ForegroundColor Green
-
-      - name: MSIX paketini Windows runner'a kurup kaldırarak doğrula
-        if: steps.msix_signing.outputs.msix_enabled == 'true'
-        shell: powershell
-        env:
-          RELEASE_VERSION: ${{ steps.source_version.outputs.release_version }}
-        run: |
-          $package = Join-Path $env:GITHUB_WORKSPACE "release-assets\Stagepulse-Ses-Merkezi-MSIX-$env:RELEASE_VERSION.msix"
-          Add-AppxPackage -Path $package -ErrorAction Stop
-          $installed = Get-AppxPackage -Name 'Stagepulse.SesMerkezi'
-          if (-not $installed) { throw 'MSIX kurulduktan sonra paket kaydı bulunamadı.' }
-          Remove-AppxPackage -Package $installed.PackageFullName -ErrorAction Stop
-          Write-Host "MSIX_INSTALL_REMOVE_OK $package" -ForegroundColor Green
 
       - name: Windows dağıtım dosyalarını sakla
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -414,7 +388,6 @@ jobs:
     env:
       RELEASE_VERSION: ${{ needs.build-windows.outputs.release_version }}
       UPDATE_CHANNEL: stable
-      MSIX_ENABLED: ${{ needs.build-windows.outputs.msix_enabled }}
     steps:
       - name: İki platformun kaynak sürümlerinin aynı olduğunu doğrula
         shell: bash
@@ -443,7 +416,6 @@ jobs:
         shell: bash
         env:
           RELEASE_VERSION: ${{ needs.build-windows.outputs.release_version }}
-          MSIX_ENABLED: ${{ needs.build-windows.outputs.msix_enabled }}
         run: |
           set -euo pipefail
           files=(
@@ -451,9 +423,6 @@ jobs:
             "Stagepulse-Ses-Merkezi-Android-$RELEASE_VERSION.apk"
             "Stagepulse-Ses-Merkezi-Android-$RELEASE_VERSION.aab"
           )
-          if [[ "$MSIX_ENABLED" == "true" ]]; then
-            files+=("Stagepulse-Ses-Merkezi-MSIX-$RELEASE_VERSION.msix")
-          fi
           for file in "${files[@]}"; do
             (cd release-assets && sha256sum -c "$file.sha256")
           done
@@ -462,11 +431,10 @@ jobs:
         shell: bash
         env:
           RELEASE_VERSION: ${{ needs.build-windows.outputs.release_version }}
-          MSIX_ENABLED: ${{ needs.build-windows.outputs.msix_enabled }}
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import hashlib, json, os, re
+          import hashlib, json, re
           from pathlib import Path
           version=os.environ["RELEASE_VERSION"]
           m=re.fullmatch(r"(\d+)\.(\d+)\.(\d+)",version)
@@ -498,20 +466,6 @@ jobs:
           if not re.fullmatch(r"[a-f0-9]{64}",store_expected) or store_expected!=store_actual:
             raise SystemExit("Microsoft Store MSIX SHA-256 doğrulanamadı.")
           items["store_msix"]={"url":f"{base}/{store_name}","sha256":store_actual,"filename":store_name,"signing":"microsoft-store"}
-          if os.environ.get("MSIX_ENABLED") == "true":
-            name=f"Stagepulse-Ses-Merkezi-MSIX-{version}.msix"
-            package=Path("release-assets")/name
-            checksum=Path(str(package)+".sha256")
-            certificate=Path("release-assets/Stagepulse-MSIX-Signing.cer")
-            if not package.is_file() or not checksum.is_file() or not certificate.is_file():
-              raise SystemExit("MSIX paketi, SHA-256 özeti veya yayın sertifikası eksik.")
-            expected=checksum.read_text(encoding="ascii").strip().split()[0].lower()
-            actual=hashlib.sha256(package.read_bytes()).hexdigest()
-            if not re.fullmatch(r"[a-f0-9]{64}",expected) or expected!=actual:
-              raise SystemExit("MSIX SHA-256 doğrulanamadı.")
-            items["msix"]={"url":f"{base}/{name}","sha256":actual,"filename":name,
-                           "certificate_url":f"{base}/Stagepulse-MSIX-Signing.cer",
-                           "publisher":"CN=Stagepulse","signing":"self-signed-certificate"}
           manifest={
             "ok":True,"published":True,"version":version,"versionName":version,"versionCode":code,
             **items,
@@ -530,7 +484,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_VERSION: ${{ needs.build-windows.outputs.release_version }}
           UPDATE_CHANNEL: stable
-          MSIX_ENABLED: ${{ needs.build-windows.outputs.msix_enabled }}
         run: |
           set -euo pipefail
           tag="v${RELEASE_VERSION}"
@@ -545,9 +498,6 @@ jobs:
           release_body="Stagepulse Ses Merkezi $RELEASE_VERSION kararlı sürümüdür.
 
           Windows kurulum EXE, Microsoft Store gönderimine hazır MSIX, Android APK ve Galaxy Store gönderimine hazır AAB birlikte yayımlandı. Paketlerin SHA-256 özetleri doğrulandı."
-          if [[ "$MSIX_ENABLED" == "true" ]]; then
-            release_body+=" Windows MSIX paketi de yayımlandı. İlk kurulumda Stagepulse MSIX sertifikası güvenilir yayıncılar deposuna eklenmelidir."
-          fi
           # Önce aynı etiketli taslağı bul; yoksa tek bir taslak oluştur.
           release_id="$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
             --jq ".[] | select(.tag_name == \"$tag\") | .id" | head -n 1 || true)"
@@ -577,7 +527,6 @@ jobs:
           mapfile -t release_files < <(find release-assets -maxdepth 1 -type f -print | sort)
           release_files+=("latest.json")
           expected_count=9
-          if [[ "$MSIX_ENABLED" == "true" ]]; then expected_count=12; fi
           if [[ ${#release_files[@]} -ne $expected_count ]]; then
             echo "::error::Dağıtım dosyası sayısı beklenen $expected_count değil."
             printf 'Bulunan dosyalar: %s\n' "${release_files[@]}"
@@ -612,13 +561,6 @@ jobs:
             "Stagepulse-Ses-Merkezi-Store-$RELEASE_VERSION.msix.sha256"
             "latest.json"
           )
-          if [[ "$MSIX_ENABLED" == "true" ]]; then
-            required_files+=(
-              "Stagepulse-Ses-Merkezi-MSIX-$RELEASE_VERSION.msix"
-              "Stagepulse-Ses-Merkezi-MSIX-$RELEASE_VERSION.msix.sha256"
-              "Stagepulse-MSIX-Signing.cer"
-            )
-          fi
           for required in "${required_files[@]}"; do
             grep -Fqx "$required" "$RUNNER_TEMP/release-assets.txt" || {
               echo "::error::Yayımlanan Release içinde eksik dosya: $required"
@@ -655,12 +597,6 @@ jobs:
               item = candidate.get(key)
               if not isinstance(item, dict) or not re.fullmatch(r"[a-f0-9]{64}", str(item.get("sha256", ""))):
                   raise SystemExit(f"{key} dağıtım kaydı veya SHA-256 eksik.")
-          if "msix" in candidate:
-              item = candidate["msix"]
-              if not isinstance(item, dict) or not re.fullmatch(r"[a-f0-9]{64}", str(item.get("sha256", ""))):
-                  raise SystemExit("MSIX dağıtım kaydı veya SHA-256 eksik.")
-              if not str(item.get("certificate_url", "")).endswith("/Stagepulse-MSIX-Signing.cer"):
-                  raise SystemExit("MSIX yayın sertifikası adresi geçersiz.")
           target_name = "latest.json"
           index = Path("update-index") / target_name
           if channel == "stable" and index.exists():
@@ -713,14 +649,6 @@ jobs:
                   raise SystemExit(f"Canlı {key} manifest kaydı veya SHA-256 geçersiz.")
               if not str(item.get("url", "")).startswith("https://github.com/ibrahimFOH/Stagepulse-Releases/releases/download/"):
                   raise SystemExit(f"Canlı {key} indirme adresi beklenen GitHub Release kaynağı değil.")
-          if "msix" in data:
-              item = data["msix"]
-              if not isinstance(item, dict) or not re.fullmatch(r"[a-f0-9]{64}", str(item.get("sha256", ""))):
-                  raise SystemExit("Canlı MSIX manifest kaydı veya SHA-256 geçersiz.")
-              if not str(item.get("url", "")).endswith(f"Stagepulse-Ses-Merkezi-MSIX-{data['version']}.msix"):
-                  raise SystemExit("Canlı MSIX indirme adresi beklenen sürümle eşleşmiyor.")
-              if not str(item.get("certificate_url", "")).endswith("/Stagepulse-MSIX-Signing.cer"):
-                  raise SystemExit("Canlı MSIX sertifika adresi geçersiz.")
           if data.get("channel") != expected_channel:
               raise SystemExit("Canlı manifest kanalı beklenen kanalla eşleşmiyor.")
           print("CANONICAL_UPDATE_MANIFEST_OK", data["version"], data.get("channel"))
@@ -880,821 +808,6 @@ jobs:
               image.convert("RGBA").resize((512,512),Image.Resampling.LANCZOS).save(icon,"PNG")
           app={"appName":"Stagepulse Ses Merkezi","packageName":"com.stagepulse.sesmerkezi",
                "versionName":version,"updateDesc":f"Stagepulse {version} update"}
-          if os.environ.get("XIAOMI_APP_CATEGORY_ID"):
-              app["category"]=int(os.environ["XIAOMI_APP_CATEGORY_ID"])
-          request_data=json.dumps({"userName":os.environ["XIAOMI_USERNAME"],
-              "synchroType":1,"appInfo":app},ensure_ascii=False,separators=(",",":"))
-          parts=[{"name":"RequestData","hash":hashlib.md5(request_data.encode()).hexdigest()},
-                 {"name":"apk","hash":hashlib.md5(apk.read_bytes()).hexdigest()},
-                 {"name":"icon","hash":hashlib.md5(icon.read_bytes()).hexdigest()}]
-          plain=json.dumps({"sig":parts,"password":os.environ["XIAOMI_API_PASSWORD"]},
-                           ensure_ascii=False,separators=(",",":")).encode()
-          key=serialization.load_pem_public_key(os.environ["XIAOMI_RSA_PUBLIC_KEY"].encode(),backend=default_backend())
-          sig=key.encrypt(plain,padding.PKCS1v15()).hex()
-          with apk.open("rb") as apk_file, icon.open("rb") as icon_file:
-              response=requests.post("https://api.developer.xiaomi.com/devupload/dev/push",
-                  data={"RequestData":request_data,"SIG":sig},
-                  files={"apk":(apk.name,apk_file,"application/vnd.android.package-archive"),
-                         "icon":(icon.name,icon_file,"image/png")},timeout=240)
-          response.raise_for_status()
-          result=response.json()
-          if result.get("result") != 0: raise SystemExit(f"Xiaomi GetApps gönderimi reddedildi: {result}")
-          print("XIAOMI_GETAPPS_SUBMITTED",version,result.get("message",""))
-          PY
-
-      - name: vivo V-Appstore'a APK yükle ve incelemeye gönder
-        if: ${{ matrix.store == 'vivo' && vars.VIVO_APPSTORE_ENABLED == 'true' }}
-        env:
-          VIVO_ACCESS_KEY: ${{ secrets.VIVO_ACCESS_KEY }}
-          VIVO_ACCESS_SECRET: ${{ secrets.VIVO_ACCESS_SECRET }}
-          VIVO_NATION_CODES: ${{ vars.VIVO_NATION_CODES }}
-          VIVO_CATEGORY_ID: ${{ vars.VIVO_CATEGORY_ID }}
-          VIVO_PRIVACY_POLICY_URL: ${{ vars.VIVO_PRIVACY_POLICY_URL }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -n "$VIVO_ACCESS_KEY"
-          test -n "$VIVO_ACCESS_SECRET"
-          test -n "$VIVO_PRIVACY_POLICY_URL"
-          python -m pip install --quiet requests
-          python - <<'PY'
-          import hashlib, hmac, os, time, requests
-          from pathlib import Path
-          base="https://developer-api.vivo.com/router/rest"
-          package="com.stagepulse.sesmerkezi"
-          version=os.environ["RELEASE_VERSION"]
-          apk=Path("packages")/f"Stagepulse-Ses-Merkezi-Android-{version}.apk"
-          if not apk.is_file(): raise SystemExit("vivo APK paketi bulunamadı.")
-          def call(method, service, files=None):
-              params={"access_key":os.environ["VIVO_ACCESS_KEY"],"timestamp":str(int(time.time()*1000)),
-                  "format":"json","version":"1.0","sign_method":"hmac-sha256","target_app_key":"developer",
-                  "method":method,**service}
-              canonical="&".join(f"{k}={params[k]}" for k in sorted(params))
-              params["sign"]=hmac.new(os.environ["VIVO_ACCESS_SECRET"].encode(),
-                  canonical.encode(),hashlib.sha256).hexdigest()
-              if files:
-                  response=requests.post(base,data=params,files=files,timeout=300)
-              else:
-                  response=requests.post(base,data=params,timeout=90)
-              response.raise_for_status()
-              data=response.json()
-              if not data.get("success") or str(data.get("subCode","0")) not in ("0","None"):
-                  raise SystemExit(f"vivo {method} başarısız: {data}")
-              return data.get("data") or {}
-          file_md5=hashlib.md5(apk.read_bytes()).hexdigest()
-          with apk.open("rb") as stream:
-              uploaded=call("app.upload.apk",{"packageName":package,"fileMd5":file_md5},
-                  {"file":(apk.name,stream,"application/vnd.android.package-archive")})
-          serial=uploaded.get("serialNumber")
-          if not serial: raise SystemExit(f"vivo APK upload serialNumber dönmedi: {uploaded}")
-          basic={"packageName":package,"apk":serial,"languageCodes":"en_in",
-              "nationCodes":os.environ.get("VIVO_NATION_CODES") or "in,id",
-              "categoryId":os.environ.get("VIVO_CATEGORY_ID") or "80000020",
-              "website":"https://stagepulse.com.tr","privacyStatement":os.environ["VIVO_PRIVACY_POLICY_URL"]}
-          call("app.update.basic.info",basic)
-          call("app.update.language.info",{"packageName":package,"appName":"Stagepulse Ses Merkezi",
-              "languageCode":"en_in","updateDesc":f"Stagepulse Ses Merkezi {version} update."})
-          call("app.update.submit",{"packageName":package,"onlineType":"1",
-              "remark":f"Stagepulse Ses Merkezi {version} stable release."})
-          print("VIVO_APPSTORE_SUBMITTED",version,serial)
-          PY
-
-      - name: Mağaza hesabı henüz etkin değil
-        if: ${{ (matrix.store == 'samsung' && vars.SAMSUNG_GALAXY_STORE_ENABLED != 'true') || (matrix.store == 'huawei' && vars.HUAWEI_APPGALLERY_ENABLED != 'true') || (matrix.store == 'xiaomi' && vars.XIAOMI_GETAPPS_ENABLED != 'true') || (matrix.store == 'vivo' && vars.VIVO_APPSTORE_ENABLED != 'true') }}
-        run: echo "Bu mağaza etkin değil; ilk mağaza kaydı ve Actions secret/variable ayarları bekleniyor."
-
-      - name: Mağaza gönderim özeti
-        if: always()
-        run: echo "store=${{ matrix.store }} version=v$RELEASE_VERSION result=${{ job.status }}"
- } |
-            Sort-Object FullName -Descending | Select-Object -First 1
-          if (-not $makeAppx) { throw "MakeAppx.exe bulunamadı; MSIX manifesti doğrulanamadı." }
-          $verifyDir = Join-Path $env:RUNNER_TEMP 'store-msix-verify'
-          if (Test-Path -LiteralPath $verifyDir) { Remove-Item -LiteralPath $verifyDir -Recurse -Force }
-          & $makeAppx.FullName unpack /p $package /d $verifyDir
-          if ($LASTEXITCODE -ne 0) { throw "Store MSIX açma doğrulaması başarısız." }
-          [xml]$manifest = Get-Content -LiteralPath (Join-Path $verifyDir 'AppxManifest.xml') -Raw
-          $identity = $manifest.Package.Identity
-          if ($identity.Name -ne 'stagepulse.stagepulsesesmerkezi') { throw "Store MSIX Identity Name uyuşmuyor: $($identity.Name)" }
-          if ($identity.Publisher -ne 'CN=8CD6B337-E6A4-4EAB-B0B3-AA17F70913DD') { throw "Store MSIX Publisher uyuşmuyor: $($identity.Publisher)" }
-          if ($identity.Version -ne "$($env:RELEASE_VERSION).0") { throw "Store MSIX sürümü kaynak sürümüyle uyuşmuyor: $($identity.Version)" }
-          Write-Host "STORE_MSIX_BUILD_VERIFY_OK $package" -ForegroundColor Green
-
-      - name: İmzalı MSIX paketini oluştur (kalıcı sertifika tanımlıysa)
-        id: msix_signing
-        shell: pwsh
-        env:
-          MSIX_SIGNING_PFX_BASE64: ${{ secrets.MSIX_SIGNING_PFX_BASE64 }}
-          MSIX_SIGNING_PFX_PASSWORD: ${{ secrets.MSIX_SIGNING_PFX_PASSWORD }}
-        run: |
-          if ([string]::IsNullOrWhiteSpace($env:MSIX_SIGNING_PFX_BASE64) -or [string]::IsNullOrWhiteSpace($env:MSIX_SIGNING_PFX_PASSWORD)) {
-            Write-Warning "MSIX imza secrets değerleri henüz tanımlı değil. EXE/APK yayını korunacak; MSIX bu sürümde atlandı."
-            "msix_enabled=false" >> $env:GITHUB_OUTPUT
-            exit 0
-          }
-          $pfxPath = Join-Path $env:RUNNER_TEMP 'Stagepulse-MSIX.pfx'
-          [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:MSIX_SIGNING_PFX_BASE64))
-          if ((Get-Item -LiteralPath $pfxPath).Length -lt 1000) { throw "MSIX PFX dosyası beklenenden küçük." }
-          $outputPath = Join-Path $env:GITHUB_WORKSPACE 'release-assets'
-          $payloadPath = Join-Path $env:GITHUB_WORKSPACE 'source\windows\build\payload\StagepulseSesMerkezi'
-          & source/windows/MSIX_OLUSTUR.ps1 -PayloadPath $payloadPath -OutputDirectory $outputPath -CertificatePath $pfxPath -CertificatePassword $env:MSIX_SIGNING_PFX_PASSWORD
-          if ($LASTEXITCODE -ne 0) { throw "MSIX_OLUSTUR.ps1 başarısız oldu: $LASTEXITCODE" }
-          $package = Join-Path $outputPath "Stagepulse-Ses-Merkezi-MSIX-$env:RELEASE_VERSION.msix"
-          if (-not (Test-Path -LiteralPath $package)) { throw "MSIX çıktısı bulunamadı: $package" }
-          if ((Get-Item -LiteralPath $package).Length -lt 1000000) { throw "MSIX paketi beklenenden küçük." }
-          "msix_enabled=true" >> $env:GITHUB_OUTPUT
-          Write-Host "MSIX_BUILD_OK $package" -ForegroundColor Green
-
-      - name: MSIX paketini Windows runner'a kurup kaldırarak doğrula
-        if: steps.msix_signing.outputs.msix_enabled == 'true'
-        shell: powershell
-        env:
-          RELEASE_VERSION: ${{ steps.source_version.outputs.release_version }}
-        run: |
-          $package = Join-Path $env:GITHUB_WORKSPACE "release-assets\Stagepulse-Ses-Merkezi-MSIX-$env:RELEASE_VERSION.msix"
-          Add-AppxPackage -Path $package -ErrorAction Stop
-          $installed = Get-AppxPackage -Name 'Stagepulse.SesMerkezi'
-          if (-not $installed) { throw 'MSIX kurulduktan sonra paket kaydı bulunamadı.' }
-          Remove-AppxPackage -Package $installed.PackageFullName -ErrorAction Stop
-          Write-Host "MSIX_INSTALL_REMOVE_OK $package" -ForegroundColor Green
-
-      - name: Windows dağıtım dosyalarını sakla
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: release-windows
-          path: release-assets/*
-          if-no-files-found: error
-          retention-days: 7
-
-  build-android:
-    name: Kalıcı anahtarla imzalı Android APK ve AAB
-    runs-on: ubuntu-latest
-    timeout-minutes: 50
-    outputs:
-      release_version: ${{ steps.source_version.outputs.release_version }}
-    env:
-      RELEASE_VERSION: ${{ github.event.client_payload.release_version || github.event.inputs.release_version || '' }}
-      UPDATE_CHANNEL: stable
-# Depo secret adları: ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD
-      ANDROID_SIGNING_KEYSTORE_BASE64: ${{ secrets.ANDROID_SIGNING_KEYSTORE_BASE64 }}
-      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-    steps:
-      - name: Özel kaynak kodunu salt-okunur token ile al
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          repository: ibrahimFOH/Stagepulse-Ses-Merkezi
-          ref: ${{ github.event.client_payload.source_ref || github.event.inputs.source_ref || (github.event_name == 'push' && 'main') }}
-          token: ${{ secrets.SOURCE_REPO_READ_TOKEN }}
-          path: source
-          persist-credentials: false
-
-      - name: Kullanılan özel kaynak commit SHA değerini kaydet
-        shell: bash
-        run: |
-          set -euo pipefail
-          git -C source rev-parse HEAD
-
-      - name: Gerekli kalıcı imzalama secrets değerlerini doğrula
-        shell: bash
-        run: |
-          set -euo pipefail
-          for name in ANDROID_SIGNING_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
-            if [ -z "${!name:-}" ]; then
-              echo "::error::Eksik Actions secret: $name"
-              exit 1
-            fi
-          done
-
-      - name: Kaynak sürümünü oku ve Android sürümünü doğrula
-        id: source_version
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          import os, re
-          from pathlib import Path
-          gradle = Path("source/android/app/build.gradle").read_text(encoding="utf-8")
-          name = re.search(r"\bversionName\s+'([^']+)'", gradle)
-          code = re.search(r"\bversionCode\s+(\d+)", gradle)
-          if not name or not code:
-              raise SystemExit("Android sürüm alanları kaynakta bulunamadı.")
-          version = name.group(1)
-          match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", version)
-          if not match:
-              raise SystemExit(f"Geçersiz kaynak sürümü: {version}")
-          expected = int(match.group(1)) * 10000 + int(match.group(2)) * 100 + int(match.group(3))
-          if int(code.group(1)) != expected:
-              raise SystemExit(f"Android versionCode uyuşmuyor: {code.group(1)} != {expected}")
-          requested = os.environ.get("RELEASE_VERSION", "")
-          if requested and requested != version:
-              raise SystemExit(f"İstenen sürüm {requested}, kaynak sürümü {version} ile eşleşmiyor.")
-          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as handle:
-              handle.write(f"RELEASE_VERSION={version}\n")
-          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as handle:
-              handle.write(f"release_version={version}\n")
-          print("SOURCE_RELEASE_VERSION", version, expected)
-          PY
-          python3 source/android/scripts/verify_assets.py
-      - name: Android JavaScript ve ortak araç regresyon testlerini çalıştır
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: "22"
-      - name: Android JavaScript doğrulaması
-        shell: bash
-        run: |
-          set -euo pipefail
-          while IFS= read -r -d "" file; do
-            test -s "$file"
-            node --check "$file"
-          done < <(find source/android/app/src/main/assets/ui -type f -name "*.js" -print0)
-          node --check source/windows/ui/app.js
-          node --check source/windows/ui/first_party_tools.js
-          node source/windows/tests/test_first_party_tools.js
-
-      - name: Java 17 kur
-        uses: actions/setup-java@dded0888837ed1f317902acf8a20df0ad188d165 # v5
-        with:
-          distribution: temurin
-          java-version: "17"
-
-      - name: Android SDK paketlerini kur
-        shell: bash
-        run: |
-          set -euo pipefail
-          SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
-          SDKMANAGER="$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager 2>/dev/null | sort -V | tail -n 1)"
-          test -n "$SDKMANAGER"
-          yes | "$SDKMANAGER" --sdk_root="$SDK_ROOT" --licenses >/dev/null || true
-          "$SDKMANAGER" --sdk_root="$SDK_ROOT" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
-
-      - name: Kalıcı Android imza anahtarını hazırla
-        shell: bash
-        run: |
-          set -euo pipefail
-          KEYSTORE="$RUNNER_TEMP/stagepulse-release.jks"
-          printf '%s' "$ANDROID_SIGNING_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE"
-          test -s "$KEYSTORE"
-          {
-            echo "ANDROID_KEYSTORE_PATH=$KEYSTORE"
-            echo "ANDROID_KEYSTORE_PASSWORD=$ANDROID_KEYSTORE_PASSWORD"
-            echo "ANDROID_KEY_ALIAS=$ANDROID_KEY_ALIAS"
-            echo "ANDROID_KEY_PASSWORD=$ANDROID_KEY_PASSWORD"
-          } >> "$GITHUB_ENV"
-
-      - name: Gradle 8.9 kur
-        uses: gradle/actions/setup-gradle@017a9effdb900e5b5b2fddfb590a105619dca3c3 # pinned SHA
-        with:
-          gradle-version: "8.13"
-
-      - name: İmzalı Android Release APK derle
-        run: gradle -p source/android --no-daemon clean testDebugUnitTest assembleRelease bundleRelease --stacktrace
-
-      - name: İmza, sürüm, hizalama ve SHA-256 doğrula
-        shell: bash
-        run: |
-          set -euo pipefail
-          APK="source/android/app/build/outputs/apk/release/app-release.apk"
-          test -s "$APK"
-          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
-          AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)"
-          ZIPALIGN="$(find "$ANDROID_HOME/build-tools" -type f -name zipalign | sort -V | tail -n 1)"
-          test -n "$APKSIGNER" && test -n "$AAPT" && test -n "$ZIPALIGN"
-          "$APKSIGNER" verify --verbose --print-certs "$APK"
-          "$ZIPALIGN" -c -v 4 "$APK"
-          CERT_FILE="$RUNNER_TEMP/stagepulse-release-cert.der"
-          APKSIGNER_REPORT="$RUNNER_TEMP/stagepulse-apksigner-report.txt"
-          keytool -exportcert -keystore "$ANDROID_KEYSTORE_PATH" -storepass "$ANDROID_KEYSTORE_PASSWORD" -alias "$ANDROID_KEY_ALIAS" -file "$CERT_FILE" >/dev/null
-          EXPECTED_CERT="$(sha256sum "$CERT_FILE" | awk '{print tolower($1)}')"
-          "$APKSIGNER" verify --print-certs "$APK" > "$APKSIGNER_REPORT"
-          ACTUAL_CERT="$(python3 - "$APKSIGNER_REPORT" <<'PY'
-          import re, sys
-          from pathlib import Path
-          report = Path(sys.argv[1]).read_text(encoding="utf-8", errors="replace")
-          digest_lines = re.findall(
-              r"(?im)^\s*V\d+\s+Signer:\s*certificate SHA-256 digest:\s*([0-9a-fA-F:]+)\s*$",
-              report,
-          )
-          digests = {value.replace(":", "").lower() for value in digest_lines}
-          if not digests or len(digests) != 1:
-              raise SystemExit(
-                  f"APK tek bir sertifika SHA-256 parmak izi sunmuyor (bulunan: {len(digests)})."
-              )
-          digest = next(iter(digests))
-          if not re.fullmatch(r"[0-9a-f]{64}", digest):
-              raise SystemExit("APK sertifika SHA-256 parmak izi biçimi geçersiz.")
-          print(digest)
-          PY
-          )"
-          test -n "$EXPECTED_CERT" && test -n "$ACTUAL_CERT"
-          echo "Keystore sertifika SHA-256: $EXPECTED_CERT"
-          echo "APK imza sertifikası SHA-256: $ACTUAL_CERT"
-          if [ "$EXPECTED_CERT" != "$ACTUAL_CERT" ]; then
-            echo "APK imza sertifikası kalıcı anahtar deposuyla eşleşmiyor." >&2
-            exit 1
-          fi
-          BADGING="$("$AAPT" dump badging "$APK")"
-          EXPECTED_CODE="$(python3 -c 'import os,re; m=re.fullmatch(r"(\d+)\.(\d+)\.(\d+)",os.environ["RELEASE_VERSION"]); print(int(m.group(1))*10000+int(m.group(2))*100+int(m.group(3)))')"
-          grep -q "versionCode='$EXPECTED_CODE'" <<< "$BADGING"
-          grep -q "versionName='$RELEASE_VERSION'" <<< "$BADGING"
-          grep -q "package: name='com.stagepulse.sesmerkezi'" <<< "$BADGING"
-          mkdir -p release-assets
-          NAME="Stagepulse-Ses-Merkezi-Android-$RELEASE_VERSION.apk"
-          cp "$APK" "release-assets/$NAME"
-          HASH="$(sha256sum "release-assets/$NAME" | awk '{print $1}')"
-          printf '%s  %s\n' "$HASH" "$NAME" > "release-assets/$NAME.sha256"
-          echo "Android SHA-256: $HASH"
-          AAB="source/android/app/build/outputs/bundle/release/app-release.aab"
-          test -s "$AAB"
-          jarsigner -verify "$AAB" >/dev/null
-          AAB_NAME="Stagepulse-Ses-Merkezi-Android-$RELEASE_VERSION.aab"
-          cp "$AAB" "release-assets/$AAB_NAME"
-          AAB_HASH="$(sha256sum "release-assets/$AAB_NAME" | awk '{print $1}')"
-          printf '%s  %s\n' "$AAB_HASH" "$AAB_NAME" > "release-assets/$AAB_NAME.sha256"
-          echo "Android AAB SHA-256: $AAB_HASH"
-
-      - name: Android dağıtım dosyalarını sakla
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: release-android
-          path: release-assets/*
-          if-no-files-found: error
-          retention-days: 7
-
-  publish:
-    name: Dört paketi doğrula ve ilgili kanalda yayımla
-    needs: [build-windows, build-android]
-    runs-on: ubuntu-latest
-    env:
-      RELEASE_VERSION: ${{ needs.build-windows.outputs.release_version }}
-      UPDATE_CHANNEL: stable
-      MSIX_ENABLED: ${{ needs.build-windows.outputs.msix_enabled }}
-    steps:
-      - name: İki platformun kaynak sürümlerinin aynı olduğunu doğrula
-        shell: bash
-        env:
-          WINDOWS_RELEASE_VERSION: ${{ needs.build-windows.outputs.release_version }}
-          ANDROID_RELEASE_VERSION: ${{ needs.build-android.outputs.release_version }}
-        run: |
-          set -euo pipefail
-          test -n "$WINDOWS_RELEASE_VERSION"
-          test "$WINDOWS_RELEASE_VERSION" = "$ANDROID_RELEASE_VERSION"
-          echo "PLATFORM_SOURCE_VERSIONS_MATCH $WINDOWS_RELEASE_VERSION"
-
-      - name: Windows dağıtım dosyalarını al
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v4
-        with:
-          name: release-windows
-          path: release-assets
-
-      - name: Android dağıtım dosyalarını al
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v4
-        with:
-          name: release-android
-          path: release-assets
-
-      - name: Windows, Android ve varsa MSIX paketlerinin SHA-256 özetini yeniden doğrula
-        shell: bash
-        env:
-          RELEASE_VERSION: ${{ needs.build-windows.outputs.release_version }}
-          MSIX_ENABLED: ${{ needs.build-windows.outputs.msix_enabled }}
-        run: |
-          set -euo pipefail
-          files=(
-            "Stagepulse-Ses-Merkezi-Windows-$RELEASE_VERSION.exe"
-            "Stagepulse-Ses-Merkezi-Android-$RELEASE_VERSION.apk"
-            "Stagepulse-Ses-Merkezi-Android-$RELEASE_VERSION.aab"
-          )
-          if [[ "$MSIX_ENABLED" == "true" ]]; then
-            files+=("Stagepulse-Ses-Merkezi-MSIX-$RELEASE_VERSION.msix")
-          fi
-          for file in "${files[@]}"; do
-            (cd release-assets && sha256sum -c "$file.sha256")
-          done
-
-      - name: Ana uygulamanın latest.json bildirimini oluştur
-        shell: bash
-        env:
-          RELEASE_VERSION: ${{ needs.build-windows.outputs.release_version }}
-          MSIX_ENABLED: ${{ needs.build-windows.outputs.msix_enabled }}
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          import hashlib, json, os, re
-          from pathlib import Path
-          version=os.environ["RELEASE_VERSION"]
-          m=re.fullmatch(r"(\d+)\.(\d+)\.(\d+)",version)
-          if not m: raise SystemExit("Geçersiz sürüm.")
-          code=int(m[1])*10000+int(m[2])*100+int(m[3])
-          tag="v"+version
-          base=f"https://github.com/ibrahimFOH/Stagepulse-Releases/releases/download/{tag}"
-          specs={
-            "windows":f"Stagepulse-Ses-Merkezi-Windows-{version}.exe",
-            "android":f"Stagepulse-Ses-Merkezi-Android-{version}.apk",
-            "android_aab":f"Stagepulse-Ses-Merkezi-Android-{version}.aab",
-          }
-          items={}
-          for key,name in specs.items():
-            package=Path("release-assets")/name
-            checksum=Path(str(package)+".sha256")
-            if not package.is_file() or not checksum.is_file(): raise SystemExit(f"{key} paketi/özeti eksik.")
-            expected=checksum.read_text(encoding="ascii").strip().split()[0].lower()
-            actual=hashlib.sha256(package.read_bytes()).hexdigest()
-            if not re.fullmatch(r"[a-f0-9]{64}",expected) or expected!=actual: raise SystemExit(f"{key} SHA-256 doğrulanamadı.")
-            items[key]={"url":f"{base}/{name}","sha256":actual,"filename":name}
-          store_name=f"Stagepulse-Ses-Merkezi-Store-{version}.msix"
-          store_package=Path("release-assets")/store_name
-          store_checksum=Path(str(store_package)+".sha256")
-          if not store_package.is_file() or not store_checksum.is_file():
-            raise SystemExit("Microsoft Store MSIX paketi veya SHA-256 özeti eksik.")
-          store_expected=store_checksum.read_text(encoding="ascii").strip().split()[0].lower()
-          store_actual=hashlib.sha256(store_package.read_bytes()).hexdigest()
-          if not re.fullmatch(r"[a-f0-9]{64}",store_expected) or store_expected!=store_actual:
-            raise SystemExit("Microsoft Store MSIX SHA-256 doğrulanamadı.")
-          items["store_msix"]={"url":f"{base}/{store_name}","sha256":store_actual,"filename":store_name,"signing":"microsoft-store"}
-          if os.environ.get("MSIX_ENABLED") == "true":
-            name=f"Stagepulse-Ses-Merkezi-MSIX-{version}.msix"
-            package=Path("release-assets")/name
-            checksum=Path(str(package)+".sha256")
-            certificate=Path("release-assets/Stagepulse-MSIX-Signing.cer")
-            if not package.is_file() or not checksum.is_file() or not certificate.is_file():
-              raise SystemExit("MSIX paketi, SHA-256 özeti veya yayın sertifikası eksik.")
-            expected=checksum.read_text(encoding="ascii").strip().split()[0].lower()
-            actual=hashlib.sha256(package.read_bytes()).hexdigest()
-            if not re.fullmatch(r"[a-f0-9]{64}",expected) or expected!=actual:
-              raise SystemExit("MSIX SHA-256 doğrulanamadı.")
-            items["msix"]={"url":f"{base}/{name}","sha256":actual,"filename":name,
-                           "certificate_url":f"{base}/Stagepulse-MSIX-Signing.cer",
-                           "publisher":"CN=Stagepulse","signing":"self-signed-certificate"}
-          manifest={
-            "ok":True,"published":True,"version":version,"versionName":version,"versionCode":code,
-            **items,
-            "url":items["windows"]["url"],"sha256":items["windows"]["sha256"],"filename":items["windows"]["filename"],
-            "apkUrl":items["android"]["url"],"apkSha256":items["android"]["sha256"],
-            "notes":f"Stagepulse Ses Merkezi {version} kararlı sürümü.",
-            "channel":"stable","prerelease":False,"release_url":f"https://github.com/ibrahimFOH/Stagepulse-Releases/releases/tag/{tag}"
-          }
-          Path("latest.json").write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
-          print("LATEST_MANIFEST_OK",version,code)
-          PY
-
-      - name: Taslak Release varlıklarını yükle ve kararlı sürümü yayımla
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_VERSION: ${{ needs.build-windows.outputs.release_version }}
-          UPDATE_CHANNEL: stable
-          MSIX_ENABLED: ${{ needs.build-windows.outputs.msix_enabled }}
-        run: |
-          set -euo pipefail
-          tag="v${RELEASE_VERSION}"
-          if [[ ! "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "::error::Geçersiz sürüm: $RELEASE_VERSION"
-            exit 1
-          fi
-
-          prerelease=false
-          make_latest=true
-          release_title="Stagepulse Ses Merkezi $RELEASE_VERSION"
-          release_body="Stagepulse Ses Merkezi $RELEASE_VERSION kararlı sürümüdür.
-
-          Windows kurulum EXE, Microsoft Store gönderimine hazır MSIX, Android APK ve Galaxy Store gönderimine hazır AAB birlikte yayımlandı. Paketlerin SHA-256 özetleri doğrulandı."
-          if [[ "$MSIX_ENABLED" == "true" ]]; then
-            release_body+=" Windows MSIX paketi de yayımlandı. İlk kurulumda Stagepulse MSIX sertifikası güvenilir yayıncılar deposuna eklenmelidir."
-          fi
-          # Önce aynı etiketli taslağı bul; yoksa tek bir taslak oluştur.
-          release_id="$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
-            --jq ".[] | select(.tag_name == \"$tag\") | .id" | head -n 1 || true)"
-          if [[ -z "$release_id" ]]; then
-            created="$(gh api --method POST "repos/$GITHUB_REPOSITORY/releases" \
-              -f tag_name="$tag" \
-              -f target_commitish=main \
-              -f name="$release_title" \
-              -f body="$release_body" \
-              -F draft=true \
-              -F prerelease="$prerelease" \
-              -f make_latest=false)"
-            release_id="$(jq -r '.id // empty' <<< "$created")"
-          fi
-          if [[ ! "$release_id" =~ ^[0-9]+$ ]]; then
-            echo "::error::GitHub Release kimliği alınamadı."
-            exit 1
-          fi
-
-          # Eski yayından kalan bağımsız yönetici paketlerini kaldır.
-          while IFS= read -r legacy_asset; do
-            [[ -z "$legacy_asset" ]] && continue
-            gh release delete-asset "$tag" "$legacy_asset" --yes --repo "$GITHUB_REPOSITORY"
-          done < <(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name | select(startswith("Stagepulse-Yonetim-Paneli-"))')
-
-          # Eski varlıkları aynı adlarla güvenli biçimde yenile.
-          mapfile -t release_files < <(find release-assets -maxdepth 1 -type f -print | sort)
-          release_files+=("latest.json")
-          expected_count=9
-          if [[ "$MSIX_ENABLED" == "true" ]]; then expected_count=12; fi
-          if [[ ${#release_files[@]} -ne $expected_count ]]; then
-            echo "::error::Dağıtım dosyası sayısı beklenen $expected_count değil."
-            printf 'Bulunan dosyalar: %s\n' "${release_files[@]}"
-            exit 1
-          fi
-          gh release upload "$tag" "${release_files[@]}" --clobber --repo "$GITHUB_REPOSITORY"
-
-          # softprops/action-gh-release ile tekrarlayan 'Finalizing release / HttpError'
-          # hatasını atla: mevcut Release kaydını doğrudan GitHub API ile yayımla.
-          gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$release_id" \
-            -f name="$release_title" \
-            -f body="$release_body" \
-            -F draft=false \
-            -F prerelease="$prerelease" \
-            -f make_latest="$make_latest" > "$RUNNER_TEMP/release-published.json"
-
-          gh api "repos/$GITHUB_REPOSITORY/releases/$release_id" > "$RUNNER_TEMP/release-verified.json"
-          jq -e --arg tag "$tag" --argjson prerelease "$prerelease" \
-            '.tag_name == $tag and .draft == false and .prerelease == $prerelease and .published_at != null' \
-            "$RUNNER_TEMP/release-verified.json" >/dev/null
-
-          gh api --paginate "repos/$GITHUB_REPOSITORY/releases/$release_id/assets?per_page=100" \
-            --jq '.[].name' > "$RUNNER_TEMP/release-assets.txt"
-          required_files=(
-            "Stagepulse-Ses-Merkezi-Windows-$RELEASE_VERSION.exe"
-            "Stagepulse-Ses-Merkezi-Windows-$RELEASE_VERSION.exe.sha256"
-            "Stagepulse-Ses-Merkezi-Android-$RELEASE_VERSION.apk"
-            "Stagepulse-Ses-Merkezi-Android-$RELEASE_VERSION.apk.sha256"
-            "Stagepulse-Ses-Merkezi-Android-$RELEASE_VERSION.aab"
-            "Stagepulse-Ses-Merkezi-Android-$RELEASE_VERSION.aab.sha256"
-            "Stagepulse-Ses-Merkezi-Store-$RELEASE_VERSION.msix"
-            "Stagepulse-Ses-Merkezi-Store-$RELEASE_VERSION.msix.sha256"
-            "latest.json"
-          )
-          if [[ "$MSIX_ENABLED" == "true" ]]; then
-            required_files+=(
-              "Stagepulse-Ses-Merkezi-MSIX-$RELEASE_VERSION.msix"
-              "Stagepulse-Ses-Merkezi-MSIX-$RELEASE_VERSION.msix.sha256"
-              "Stagepulse-MSIX-Signing.cer"
-            )
-          fi
-          for required in "${required_files[@]}"; do
-            grep -Fqx "$required" "$RUNNER_TEMP/release-assets.txt" || {
-              echo "::error::Yayımlanan Release içinde eksik dosya: $required"
-              exit 1
-            }
-          done
-          gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" >/dev/null
-          echo "RELEASE_PUBLISHED_OK $tag channel=$UPDATE_CHANNEL release_id=$release_id"
-      - name: Güncel manifest deposunu ana dala al
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: main
-          path: update-index
-          persist-credentials: true
-
-      - name: Doğrulanmış güncelleme manifestini doğru kanala yayımla
-        shell: bash
-        env:
-          RELEASE_VERSION: ${{ needs.build-windows.outputs.release_version }}
-          UPDATE_CHANNEL: stable
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          import json, os, re
-          from pathlib import Path
-          version = os.environ["RELEASE_VERSION"]
-          channel = os.environ["UPDATE_CHANNEL"]
-          candidate = json.loads(Path("latest.json").read_text(encoding="utf-8"))
-          if candidate.get("version") != version or candidate.get("published") is not True:
-              raise SystemExit("Yayımlanacak manifest sürümü veya yayın durumu geçersiz.")
-          if candidate.get("channel") != "stable" or candidate.get("prerelease") is not False:
-              raise SystemExit("Manifest yalnızca kararlı kanal olarak yayımlanabilir.")
-          for key in ("windows", "android", "android_aab"):
-              item = candidate.get(key)
-              if not isinstance(item, dict) or not re.fullmatch(r"[a-f0-9]{64}", str(item.get("sha256", ""))):
-                  raise SystemExit(f"{key} dağıtım kaydı veya SHA-256 eksik.")
-          if "msix" in candidate:
-              item = candidate["msix"]
-              if not isinstance(item, dict) or not re.fullmatch(r"[a-f0-9]{64}", str(item.get("sha256", ""))):
-                  raise SystemExit("MSIX dağıtım kaydı veya SHA-256 eksik.")
-              if not str(item.get("certificate_url", "")).endswith("/Stagepulse-MSIX-Signing.cer"):
-                  raise SystemExit("MSIX yayın sertifikası adresi geçersiz.")
-          target_name = "latest.json"
-          index = Path("update-index") / target_name
-          if channel == "stable" and index.exists():
-              current = json.loads(index.read_text(encoding="utf-8"))
-              def parts(value): return tuple(int(x) for x in str(value).split("."))
-              if parts(current.get("version", "0")) > parts(version):
-                  raise SystemExit("Daha yeni kararlı manifest var; üzerine yazılmadı.")
-          index.write_text(json.dumps(candidate, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-          print("UPDATE_CHANNEL_MANIFEST_OK", channel, version, target_name)
-          PY
-          cd update-index
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add latest.json
-          if git diff --cached --quiet; then
-            echo "İlgili kanal manifesti zaten güncel."
-            exit 0
-          fi
-          git commit -m "chore(updates): publish ${UPDATE_CHANNEL} Ses Merkezi ${RELEASE_VERSION} manifest"
-          git push origin HEAD:main
-
-      - name: Genel güncelleme manifestini canlı kaynaktan doğrula
-        shell: bash
-        env:
-          RELEASE_VERSION: ${{ needs.build-windows.outputs.release_version }}
-          UPDATE_CHANNEL: stable
-        run: |
-          set -euo pipefail
-          manifest_file="$(mktemp)"
-          manifest_name="latest.json"
-          trap 'rm -f "$manifest_file"' EXIT
-          curl --fail --location --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 15 --max-time 90 \
-            --header "Accept: application/json" --header "Cache-Control: no-cache" \
-            "https://raw.githubusercontent.com/ibrahimFOH/Stagepulse-Releases/main/$manifest_name" --output "$manifest_file"
-          python3 - "$manifest_file" "$RELEASE_VERSION" "$UPDATE_CHANNEL" <<'PY'
-          import json, re, sys
-          from pathlib import Path
-          data = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-          expected_channel = sys.argv[3]
-          if data.get("ok") is not True or data.get("published") is not True:
-              raise SystemExit("Canlı güncelleme manifesti yayımlanmış değil.")
-          def parts(value): return tuple(int(x) for x in str(value).split("."))
-          if parts(data.get("version", "0")) < parts(sys.argv[2]):
-              raise SystemExit("Canlı güncelleme manifesti yayınlanan sürümün gerisinde.")
-          if parts(data.get("version", "0")) > parts(sys.argv[2]):
-              print("Daha yeni sürüm zaten yayımlı:", data["version"])
-          for key in ("windows", "android", "android_aab", "store_msix"):
-              item = data.get(key)
-              if not isinstance(item, dict) or not re.fullmatch(r"[a-f0-9]{64}", str(item.get("sha256", ""))):
-                  raise SystemExit(f"Canlı {key} manifest kaydı veya SHA-256 geçersiz.")
-              if not str(item.get("url", "")).startswith("https://github.com/ibrahimFOH/Stagepulse-Releases/releases/download/"):
-                  raise SystemExit(f"Canlı {key} indirme adresi beklenen GitHub Release kaynağı değil.")
-          if "msix" in data:
-              item = data["msix"]
-              if not isinstance(item, dict) or not re.fullmatch(r"[a-f0-9]{64}", str(item.get("sha256", ""))):
-                  raise SystemExit("Canlı MSIX manifest kaydı veya SHA-256 geçersiz.")
-              if not str(item.get("url", "")).endswith(f"Stagepulse-Ses-Merkezi-MSIX-{data['version']}.msix"):
-                  raise SystemExit("Canlı MSIX indirme adresi beklenen sürümle eşleşmiyor.")
-              if not str(item.get("certificate_url", "")).endswith("/Stagepulse-MSIX-Signing.cer"):
-                  raise SystemExit("Canlı MSIX sertifika adresi geçersiz.")
-          if data.get("channel") != expected_channel:
-              raise SystemExit("Canlı manifest kanalı beklenen kanalla eşleşmiyor.")
-          print("CANONICAL_UPDATE_MANIFEST_OK", data["version"], data.get("channel"))
-          PY
-          WINDOWS_ENDPOINT="$(mktemp)"
-          ANDROID_ENDPOINT="$(mktemp)"
-          trap 'rm -f "$manifest_file" "$WINDOWS_ENDPOINT" "$ANDROID_ENDPOINT"' EXIT
-          BASE="https://itasctyjzyewcykozuex.supabase.co/functions/v1/ses-merkezi-updates"
-          curl --fail --location --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 15 --max-time 60 "$BASE?platform=windows&channel=stable" --output "$WINDOWS_ENDPOINT"
-          curl --fail --location --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 15 --max-time 60 "$BASE?platform=android&channel=stable" --output "$ANDROID_ENDPOINT"
-          python3 - "$WINDOWS_ENDPOINT" "$ANDROID_ENDPOINT" "$RELEASE_VERSION" <<'PY'
-          import json, re, sys
-          from pathlib import Path
-          win = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-          apk = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
-          version = sys.argv[3]
-          for label, item in (("Windows", win), ("Android", apk)):
-              if item.get("ok") is not True or item.get("published") is not True:
-                  raise SystemExit(f"{label} güncelleme uç noktası yayımlanmış sürüm döndürmedi.")
-              if item.get("version") != version or item.get("channel") != "stable" or item.get("prerelease") is not False:
-                  raise SystemExit(f"{label} güncelleme uç noktası sürüm/kanal uyuşmazlığı.")
-          if not re.fullmatch(r"[a-f0-9]{64}", str(win.get("sha256", ""))):
-              raise SystemExit("Windows uç noktası SHA-256 geçersiz.")
-          if not re.fullmatch(r"[a-f0-9]{64}", str(apk.get("apkSha256", ""))):
-              raise SystemExit("Android uç noktası SHA-256 geçersiz.")
-          print("LIVE_UPDATER_ENDPOINTS_OK", version)
-          PY
-
-  publish-android-stores:
-    name: Android mağazalarına paralel gönderim
-    needs: [build-android, build-windows, publish]
-    if: ${{ needs.publish.result == 'success' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        store: [samsung, huawei, xiaomi, vivo]
-    env:
-      RELEASE_VERSION: ${{ needs.build-windows.outputs.release_version }}
-      GH_TOKEN: ${{ github.token }}
-    steps:
-      - name: Yayın paketlerini indir
-        shell: bash
-        run: |
-          set -euo pipefail
-          gh release download "v$RELEASE_VERSION" --repo "$GITHUB_REPOSITORY" \
-            --pattern "Stagepulse-Ses-Merkezi-Android-$RELEASE_VERSION.apk" \
-            --pattern "Stagepulse-Ses-Merkezi-Android-$RELEASE_VERSION.aab" \
-            --dir packages
-      - name: Özel kaynak deposundan mağaza simgesini al
-        if: ${{ matrix.store == 'xiaomi' && vars.XIAOMI_GETAPPS_ENABLED == 'true' }}
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          repository: ibrahimFOH/Stagepulse-Ses-Merkezi
-          ref: ${{ github.event.client_payload.source_ref || github.event.inputs.source_ref || 'main' }}
-          token: ${{ secrets.SOURCE_REPO_READ_TOKEN }}
-          path: source
-          sparse-checkout: windows/ui/assets/stagepulse-icon-256.png
-          persist-credentials: false
-
-      - name: Samsung Galaxy Store'a AAB yükle ve incelemeye gönder
-        if: ${{ matrix.store == 'samsung' && vars.SAMSUNG_GALAXY_STORE_ENABLED == 'true' }}
-        env:
-          GALAXY_STORE_ACCESS_TOKEN: ${{ secrets.SAMSUNG_ACCESS_TOKEN }}
-          GALAXY_STORE_SERVICE_ACCOUNT_ID: ${{ secrets.SAMSUNG_SERVICE_ACCOUNT_ID }}
-          SAMSUNG_CONTENT_ID: ${{ vars.SAMSUNG_CONTENT_ID }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -n "$GALAXY_STORE_ACCESS_TOKEN"
-          test -n "$GALAXY_STORE_SERVICE_ACCOUNT_ID"
-          [[ "$SAMSUNG_CONTENT_ID" =~ ^[0-9]{12}$ ]]
-          gem install fastlane-plugin-galaxystore --no-document
-          cat > Fastfile <<'RUBY'
-          default_platform(:android)
-          platform :android do
-            lane :release do
-              galaxy_store_upload_apk(
-                content_id: ENV.fetch("SAMSUNG_CONTENT_ID"),
-                apk_path: ENV.fetch("AAB_PATH"),
-                gms: "N"
-              )
-              galaxy_store_set_publication_type(
-                content_id: ENV.fetch("SAMSUNG_CONTENT_ID"),
-                publication_type: "01"
-              )
-              galaxy_store_submit_app(content_id: ENV.fetch("SAMSUNG_CONTENT_ID"))
-            end
-          end
-          RUBY
-          AAB_PATH="$PWD/packages/Stagepulse-Ses-Merkezi-Android-$RELEASE_VERSION.aab" \
-            fastlane android release
-          echo "SAMSUNG_GALAXY_STORE_SUBMITTED v$RELEASE_VERSION"
-
-      - name: Huawei AppGallery'ye AAB yükle ve incelemeye gönder
-        if: ${{ matrix.store == 'huawei' && vars.HUAWEI_APPGALLERY_ENABLED == 'true' }}
-        env:
-          HUAWEI_CLIENT_ID: ${{ secrets.HUAWEI_CLIENT_ID }}
-          HUAWEI_CLIENT_SECRET: ${{ secrets.HUAWEI_CLIENT_SECRET }}
-          HUAWEI_APP_ID: ${{ vars.HUAWEI_APP_ID }}
-          HUAWEI_PRIVACY_POLICY_URL: ${{ vars.HUAWEI_PRIVACY_POLICY_URL }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -n "$HUAWEI_CLIENT_ID"
-          test -n "$HUAWEI_CLIENT_SECRET"
-          test -n "$HUAWEI_APP_ID"
-          test -n "$HUAWEI_PRIVACY_POLICY_URL"
-          gem install fastlane-plugin-huawei_appgallery_connect --no-document
-          cat > Fastfile <<'RUBY'
-          default_platform(:android)
-          platform :android do
-            lane :release do
-              huawei_appgallery_connect(
-                client_id: ENV.fetch("HUAWEI_CLIENT_ID"),
-                client_secret: ENV.fetch("HUAWEI_CLIENT_SECRET"),
-                app_id: ENV.fetch("HUAWEI_APP_ID"),
-                apk_path: ENV.fetch("AAB_PATH"),
-                is_aab: true,
-                submit_for_review: true,
-                privacy_policy_url: ENV.fetch("HUAWEI_PRIVACY_POLICY_URL")
-              )
-            end
-          end
-          RUBY
-          AAB_PATH="$PWD/packages/Stagepulse-Ses-Merkezi-Android-$RELEASE_VERSION.aab" \
-            fastlane android release
-          echo "HUAWEI_APPGALLERY_SUBMITTED v$RELEASE_VERSION"
-
-      - name: Xiaomi GetApps'e APK ve simge yükle
-        if: ${{ matrix.store == 'xiaomi' && vars.XIAOMI_GETAPPS_ENABLED == 'true' }}
-        env:
-          XIAOMI_USERNAME: ${{ secrets.XIAOMI_USERNAME }}
-          XIAOMI_API_PASSWORD: ${{ secrets.XIAOMI_API_PASSWORD }}
-          XIAOMI_RSA_PUBLIC_KEY: ${{ secrets.XIAOMI_RSA_PUBLIC_KEY }}
-          XIAOMI_APP_CATEGORY_ID: ${{ vars.XIAOMI_APP_CATEGORY_ID }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -n "$XIAOMI_USERNAME"
-          test -n "$XIAOMI_API_PASSWORD"
-          test -n "$XIAOMI_RSA_PUBLIC_KEY"
-          python -m pip install --quiet requests cryptography pillow
-          python - <<'PY'
-          import hashlib, json, os, pathlib, requests
-          from cryptography.hazmat.primitives import hashes, serialization
-          from cryptography.hazmat.primitives.asymmetric import padding
-          from cryptography.hazmat.backends import default_backend
-          version=os.environ["RELEASE_VERSION"]
-          apk=pathlib.Path("packages")/f"Stagepulse-Ses-Merkezi-Android-{version}.apk"
-          icon_source=pathlib.Path("source/windows/ui/assets/stagepulse-icon-256.png")
-          icon=pathlib.Path("packages/stagepulse-icon-512.png")
-          if not apk.is_file() or not icon_source.is_file(): raise SystemExit("Xiaomi APK veya uygulama simgesi eksik.")
-          from PIL import Image
-          with Image.open(icon_source) as image:
-              image.convert("RGBA").resize((512,512),Image.Resampling.LANCZOS).save(icon,"PNG")
-          app={"appName":"Stagepulse Ses Merkezi","packageName":"com.stagepulse.sesmerkezi",
-               "versionName":version}
           if os.environ.get("XIAOMI_APP_CATEGORY_ID"):
               app["category"]=int(os.environ["XIAOMI_APP_CATEGORY_ID"])
           request_data=json.dumps({"userName":os.environ["XIAOMI_USERNAME"],
