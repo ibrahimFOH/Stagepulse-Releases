@@ -819,12 +819,14 @@ jobs:
           HUAWEI_CLIENT_ID: ${{ secrets.HUAWEI_CLIENT_ID }}
           HUAWEI_CLIENT_SECRET: ${{ secrets.HUAWEI_CLIENT_SECRET }}
           HUAWEI_APP_ID: ${{ vars.HUAWEI_APP_ID }}
+          HUAWEI_PRIVACY_POLICY_URL: ${{ vars.HUAWEI_PRIVACY_POLICY_URL }}
         shell: bash
         run: |
           set -euo pipefail
           test -n "$HUAWEI_CLIENT_ID"
           test -n "$HUAWEI_CLIENT_SECRET"
           test -n "$HUAWEI_APP_ID"
+          test -n "$HUAWEI_PRIVACY_POLICY_URL"
           gem install fastlane-plugin-huawei_appgallery_connect --no-document
           cat > Fastfile <<'RUBY'
           default_platform(:android)
@@ -837,7 +839,7 @@ jobs:
                 apk_path: ENV.fetch("AAB_PATH"),
                 is_aab: true,
                 submit_for_review: true,
-                privacy_policy_url: "https://stagepulse.com.tr/gizlilik.html"
+                privacy_policy_url: ENV.fetch("HUAWEI_PRIVACY_POLICY_URL")
               )
             end
           end
@@ -859,7 +861,7 @@ jobs:
           test -n "$XIAOMI_USERNAME"
           test -n "$XIAOMI_API_PASSWORD"
           test -n "$XIAOMI_RSA_PUBLIC_KEY"
-          python -m pip install --quiet requests cryptography
+          python -m pip install --quiet requests cryptography pillow
           python - <<'PY'
           import hashlib, json, os, pathlib, requests
           from cryptography.hazmat.primitives import hashes, serialization
@@ -867,10 +869,14 @@ jobs:
           from cryptography.hazmat.backends import default_backend
           version=os.environ["RELEASE_VERSION"]
           apk=pathlib.Path("packages")/f"Stagepulse-Ses-Merkezi-Android-{version}.apk"
-          icon=pathlib.Path("source/windows/ui/assets/stagepulse-icon-256.png")
-          if not apk.is_file() or not icon.is_file(): raise SystemExit("Xiaomi APK veya uygulama simgesi eksik.")
+          icon_source=pathlib.Path("source/windows/ui/assets/stagepulse-icon-256.png")
+          icon=pathlib.Path("packages/stagepulse-icon-512.png")
+          if not apk.is_file() or not icon_source.is_file(): raise SystemExit("Xiaomi APK veya uygulama simgesi eksik.")
+          from PIL import Image
+          with Image.open(icon_source) as image:
+              image.convert("RGBA").resize((512,512),Image.Resampling.LANCZOS).save(icon,"PNG")
           app={"appName":"Stagepulse Ses Merkezi","packageName":"com.stagepulse.sesmerkezi",
-               "versionName":version,"updateDesc":f"Stagepulse Ses Merkezi {version} güncellemesi."}
+               "versionName":version}
           if os.environ.get("XIAOMI_APP_CATEGORY_ID"):
               app["category"]=int(os.environ["XIAOMI_APP_CATEGORY_ID"])
           request_data=json.dumps({"userName":os.environ["XIAOMI_USERNAME"],
@@ -900,11 +906,13 @@ jobs:
           VIVO_ACCESS_SECRET: ${{ secrets.VIVO_ACCESS_SECRET }}
           VIVO_NATION_CODES: ${{ vars.VIVO_NATION_CODES }}
           VIVO_CATEGORY_ID: ${{ vars.VIVO_CATEGORY_ID }}
+          VIVO_PRIVACY_POLICY_URL: ${{ vars.VIVO_PRIVACY_POLICY_URL }}
         shell: bash
         run: |
           set -euo pipefail
           test -n "$VIVO_ACCESS_KEY"
           test -n "$VIVO_ACCESS_SECRET"
+          test -n "$VIVO_PRIVACY_POLICY_URL"
           python -m pip install --quiet requests
           python - <<'PY'
           import hashlib, hmac, os, time, requests
@@ -939,7 +947,7 @@ jobs:
           basic={"packageName":package,"apk":serial,"languageCodes":"en_in",
               "nationCodes":os.environ.get("VIVO_NATION_CODES") or "in,id",
               "categoryId":os.environ.get("VIVO_CATEGORY_ID") or "80000020",
-              "website":"https://stagepulse.com.tr","privacyStatement":"https://stagepulse.com.tr/gizlilik.html"}
+              "website":"https://stagepulse.com.tr","privacyStatement":os.environ["VIVO_PRIVACY_POLICY_URL"]}
           call("app.update.basic.info",basic)
           call("app.update.language.info",{"packageName":package,"appName":"Stagepulse Ses Merkezi",
               "languageCode":"en_in","updateDesc":f"Stagepulse Ses Merkezi {version} update."})
