@@ -36,10 +36,12 @@ jobs:
           test -n "$SUPABASE_ACCESS_TOKEN" || { echo "::error::SUPABASE_ACCESS_TOKEN secret eksik."; exit 1; }
           test -s source/windows/supabase/functions/ses-merkezi-updates/index.ts
 
-      - name: Supabase CLI kur
-        uses: supabase/setup-cli@v1
-        with:
-          version: latest
+      - name: Sabit sürümlü Supabase CLI kur
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --global supabase@2.81.3
+          supabase --version
 
       - name: Yalnızca güncelleme fonksiyonunu dağıt
         shell: bash
