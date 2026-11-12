@@ -755,7 +755,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        store: [samsung, huawei, xiaomi]
+        store: [samsung, huawei, xiaomi, vivo]
     env:
       RELEASE_VERSION: ${{ needs.build-windows.outputs.release_version }}
       GH_TOKEN: ${{ github.token }}
@@ -916,7 +916,7 @@ jobs:
           if not apk.is_file(): raise SystemExit("vivo APK paketi bulunamadı.")
           def call(method, service, files=None):
               params={"access_key":os.environ["VIVO_ACCESS_KEY"],"timestamp":str(int(time.time()*1000)),
-                  "format":"json","v":"1.0","sign_method":"hmac-sha256","target_app_key":"developer",
+                  "format":"json","version":"1.0","sign_method":"hmac-sha256","target_app_key":"developer",
                   "method":method,**service}
               canonical="&".join(f"{k}={params[k]}" for k in sorted(params))
               params["sign"]=hmac.new(os.environ["VIVO_ACCESS_SECRET"].encode(),
@@ -942,8 +942,7 @@ jobs:
               "website":"https://stagepulse.com.tr","privacyStatement":"https://stagepulse.com.tr/gizlilik.html"}
           call("app.update.basic.info",basic)
           call("app.update.language.info",{"packageName":package,"appName":"Stagepulse Ses Merkezi",
-              "languageCode":"en_in","updateDesc":f"Stagepulse Ses Merkezi {version} update.",
-              "lanInfoCompete":"true"})
+              "languageCode":"en_in","updateDesc":f"Stagepulse Ses Merkezi {version} update."})
           call("app.update.submit",{"packageName":package,"onlineType":"1",
               "remark":f"Stagepulse Ses Merkezi {version} stable release."})
           print("VIVO_APPSTORE_SUBMITTED",version,serial)
