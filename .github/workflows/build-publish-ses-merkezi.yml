@@ -704,7 +704,7 @@ jobs:
               raise SystemExit("Canlı güncelleme manifesti yayınlanan sürümün gerisinde.")
           if parts(data.get("version", "0")) > parts(sys.argv[2]):
               print("Daha yeni sürüm zaten yayımlı:", data["version"])
-          for key in ("windows", "android"):
+          for key in ("windows", "android", "android_aab", "store_msix"):
               item = data.get(key)
               if not isinstance(item, dict) or not re.fullmatch(r"[a-f0-9]{64}", str(item.get("sha256", ""))):
                   raise SystemExit(f"Canlı {key} manifest kaydı veya SHA-256 geçersiz.")
