@@ -412,7 +412,7 @@ jobs:
           name: release-android
           path: release-assets
 
-      - name: Windows, Android ve varsa MSIX paketlerinin SHA-256 özetini yeniden doğrula
+      - name: Windows EXE, Store MSIX ve Android paketlerinin SHA-256 özetini yeniden doğrula
         shell: bash
         env:
           RELEASE_VERSION: ${{ needs.build-windows.outputs.release_version }}
@@ -434,7 +434,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import hashlib, json, re
+          import hashlib, json, os, re
           from pathlib import Path
           version=os.environ["RELEASE_VERSION"]
           m=re.fullmatch(r"(\d+)\.(\d+)\.(\d+)",version)
