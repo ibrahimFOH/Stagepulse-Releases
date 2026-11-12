@@ -28,6 +28,7 @@ permissions:
 concurrency:
   group: ses-merkezi-release-pipeline
   cancel-in-progress: false
+  queue: max
 
 jobs:
   build-windows:
