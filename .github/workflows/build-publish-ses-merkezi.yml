@@ -813,7 +813,7 @@ jobs:
             fastlane android release
           echo "SAMSUNG_GALAXY_STORE_SUBMITTED v$RELEASE_VERSION"
 
-      - name: Huawei AppGallery'ye APK yükleme ve incelemeye gönderim
+      - name: Huawei AppGallery'ye AAB yükle ve incelemeye gönder
         if: ${{ matrix.store == 'huawei' && vars.HUAWEI_APPGALLERY_ENABLED == 'true' }}
         env:
           HUAWEI_CLIENT_ID: ${{ secrets.HUAWEI_CLIENT_ID }}
@@ -825,23 +825,25 @@ jobs:
           test -n "$HUAWEI_CLIENT_ID"
           test -n "$HUAWEI_CLIENT_SECRET"
           test -n "$HUAWEI_APP_ID"
-          TOKEN="$(curl --fail --silent --show-error --retry 3 \
-            -H 'Content-Type: application/json' \
-            -d "$(jq -n --arg id "$HUAWEI_CLIENT_ID" --arg secret "$HUAWEI_CLIENT_SECRET" \
-              '{grant_type:"client_credentials",client_id:$id,client_secret:$secret}')" \
-            https://connect-api.cloud.huawei.com/api/oauth2/v1/token | jq -er '.access_token')"
-          APK="Stagepulse-Ses-Merkezi-Android-$RELEASE_VERSION.apk"
-          URL="https://github.com/$GITHUB_REPOSITORY/releases/download/v$RELEASE_VERSION/$APK"
-          BODY="$(jq -n --arg url "$URL" --arg file "$APK" --arg ver "$RELEASE_VERSION" \
-            --arg req "stagepulse-$RELEASE_VERSION" \
-            '{downloadUrl:$url,downloadFileName:$file,requestId:$req,versionName:$ver,releaseType:1,remark:("Stagepulse Ses Merkezi "+$ver+" kararlı sürümü.")}')"
-          RESPONSE="$(curl --fail --silent --show-error --retry 3 \
-            -X POST "https://connect-api.cloud.huawei.com/api/publish/v2/app-submit-with-file?appId=$HUAWEI_APP_ID" \
-            -H "Authorization: Bearer $TOKEN" \
-            -H "client_id: $HUAWEI_CLIENT_ID" \
-            -H 'Content-Type: application/json' -d "$BODY")"
-          echo "$RESPONSE" | jq .
-          echo "$RESPONSE" | jq -e '(.ret == null) or (.ret == "0") or ((.ret|tostring) == "0")' >/dev/null
+          gem install fastlane-plugin-huawei_appgallery_connect --no-document
+          cat > Fastfile <<'RUBY'
+          default_platform(:android)
+          platform :android do
+            lane :release do
+              huawei_appgallery_connect(
+                client_id: ENV.fetch("HUAWEI_CLIENT_ID"),
+                client_secret: ENV.fetch("HUAWEI_CLIENT_SECRET"),
+                app_id: ENV.fetch("HUAWEI_APP_ID"),
+                apk_path: ENV.fetch("AAB_PATH"),
+                is_aab: true,
+                submit_for_review: true,
+                privacy_policy_url: "https://stagepulse.com.tr/gizlilik.html"
+              )
+            end
+          end
+          RUBY
+          AAB_PATH="$PWD/packages/Stagepulse-Ses-Merkezi-Android-$RELEASE_VERSION.aab" \
+            fastlane android release
           echo "HUAWEI_APPGALLERY_SUBMITTED v$RELEASE_VERSION"
 
       - name: Xiaomi GetApps'e APK ve simge yükle
@@ -891,8 +893,64 @@ jobs:
           print("XIAOMI_GETAPPS_SUBMITTED",version,result.get("message",""))
           PY
 
+      - name: vivo V-Appstore'a APK yükle ve incelemeye gönder
+        if: ${{ matrix.store == 'vivo' && vars.VIVO_APPSTORE_ENABLED == 'true' }}
+        env:
+          VIVO_ACCESS_KEY: ${{ secrets.VIVO_ACCESS_KEY }}
+          VIVO_ACCESS_SECRET: ${{ secrets.VIVO_ACCESS_SECRET }}
+          VIVO_NATION_CODES: ${{ vars.VIVO_NATION_CODES }}
+          VIVO_CATEGORY_ID: ${{ vars.VIVO_CATEGORY_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$VIVO_ACCESS_KEY"
+          test -n "$VIVO_ACCESS_SECRET"
+          python -m pip install --quiet requests
+          python - <<'PY'
+          import hashlib, hmac, os, time, requests
+          from pathlib import Path
+          base="https://developer-api.vivo.com/router/rest"
+          package="com.stagepulse.sesmerkezi"
+          version=os.environ["RELEASE_VERSION"]
+          apk=Path("packages")/f"Stagepulse-Ses-Merkezi-Android-{version}.apk"
+          if not apk.is_file(): raise SystemExit("vivo APK paketi bulunamadı.")
+          def call(method, service, files=None):
+              params={"access_key":os.environ["VIVO_ACCESS_KEY"],"timestamp":str(int(time.time()*1000)),
+                  "format":"json","v":"1.0","sign_method":"hmac-sha256","target_app_key":"developer",
+                  "method":method,**service}
+              canonical="&".join(f"{k}={params[k]}" for k in sorted(params))
+              params["sign"]=hmac.new(os.environ["VIVO_ACCESS_SECRET"].encode(),
+                  canonical.encode(),hashlib.sha256).hexdigest()
+              if files:
+                  response=requests.post(base,data=params,files=files,timeout=300)
+              else:
+                  response=requests.post(base,data=params,timeout=90)
+              response.raise_for_status()
+              data=response.json()
+              if not data.get("success") or str(data.get("subCode","0")) not in ("0","None"):
+                  raise SystemExit(f"vivo {method} başarısız: {data}")
+              return data.get("data") or {}
+          file_md5=hashlib.md5(apk.read_bytes()).hexdigest()
+          with apk.open("rb") as stream:
+              uploaded=call("app.upload.apk",{"packageName":package,"fileMd5":file_md5},
+                  {"file":(apk.name,stream,"application/vnd.android.package-archive")})
+          serial=uploaded.get("serialNumber")
+          if not serial: raise SystemExit(f"vivo APK upload serialNumber dönmedi: {uploaded}")
+          basic={"packageName":package,"apk":serial,"languageCodes":"en_in",
+              "nationCodes":os.environ.get("VIVO_NATION_CODES") or "in,id",
+              "categoryId":os.environ.get("VIVO_CATEGORY_ID") or "80000020",
+              "website":"https://stagepulse.com.tr","privacyStatement":"https://stagepulse.com.tr/gizlilik.html"}
+          call("app.update.basic.info",basic)
+          call("app.update.language.info",{"packageName":package,"appName":"Stagepulse Ses Merkezi",
+              "languageCode":"en_in","updateDesc":f"Stagepulse Ses Merkezi {version} update.",
+              "lanInfoCompete":"true"})
+          call("app.update.submit",{"packageName":package,"onlineType":"1",
+              "remark":f"Stagepulse Ses Merkezi {version} stable release."})
+          print("VIVO_APPSTORE_SUBMITTED",version,serial)
+          PY
+
       - name: Mağaza hesabı henüz etkin değil
-        if: ${{ (matrix.store == 'samsung' && vars.SAMSUNG_GALAXY_STORE_ENABLED != 'true') || (matrix.store == 'huawei' && vars.HUAWEI_APPGALLERY_ENABLED != 'true') || (matrix.store == 'xiaomi' && vars.XIAOMI_GETAPPS_ENABLED != 'true') }}
+        if: ${{ (matrix.store == 'samsung' && vars.SAMSUNG_GALAXY_STORE_ENABLED != 'true') || (matrix.store == 'huawei' && vars.HUAWEI_APPGALLERY_ENABLED != 'true') || (matrix.store == 'xiaomi' && vars.XIAOMI_GETAPPS_ENABLED != 'true') || (matrix.store == 'vivo' && vars.VIVO_APPSTORE_ENABLED != 'true') }}
         run: echo "Bu mağaza etkin değil; ilk mağaza kaydı ve Actions secret/variable ayarları bekleniyor."
 
       - name: Mağaza gönderim özeti
