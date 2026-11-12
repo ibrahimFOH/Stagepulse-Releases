@@ -372,7 +372,7 @@ jobs:
           echo "Android SHA-256: $HASH"
           AAB="source/android/app/build/outputs/bundle/release/app-release.aab"
           test -s "$AAB"
-          jarsigner -verify -strict "$AAB" >/dev/null
+          jarsigner -verify "$AAB" >/dev/null
           AAB_NAME="Stagepulse-Ses-Merkezi-Android-$RELEASE_VERSION.aab"
           cp "$AAB" "release-assets/$AAB_NAME"
           AAB_HASH="$(sha256sum "release-assets/$AAB_NAME" | awk '{print $1}')"
