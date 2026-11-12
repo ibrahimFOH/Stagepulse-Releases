@@ -28,9 +28,9 @@ GitHub `Stagepulse-Releases` deposunda Settings → Secrets and variables → Ac
 **Repository Variables**
 
 - `SAMSUNG_GALAXY_STORE_ENABLED` = `true`; `SAMSUNG_CONTENT_ID` = Seller Portal'daki 12 haneli Content ID.
-- `HUAWEI_APPGALLERY_ENABLED` = `true`; `HUAWEI_APP_ID` = AppGallery Connect App ID.
+- `HUAWEI_APPGALLERY_ENABLED` = `true`; `HUAWEI_APP_ID` = AppGallery Connect App ID; `HUAWEI_PRIVACY_POLICY_URL` = onaylı gizlilik politikası adresi.
 - `XIAOMI_GETAPPS_ENABLED` = `true`; `XIAOMI_APP_CATEGORY_ID` = GetApps kategori numarası (varsa).
-- `VIVO_APPSTORE_ENABLED` = `true`; `VIVO_NATION_CODES` = örneğin `in,id`; `VIVO_CATEGORY_ID` = V-Appstore kategori numarası.
+- `VIVO_APPSTORE_ENABLED` = `true`; `VIVO_NATION_CODES` = örneğin `in,id`; `VIVO_CATEGORY_ID` = V-Appstore kategori numarası; `VIVO_PRIVACY_POLICY_URL` = onaylı gizlilik politikası adresi.
 
 **Repository Secrets**
 
