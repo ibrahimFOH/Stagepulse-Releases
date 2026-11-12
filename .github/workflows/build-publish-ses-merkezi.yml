@@ -879,7 +879,7 @@ jobs:
           with Image.open(icon_source) as image:
               image.convert("RGBA").resize((512,512),Image.Resampling.LANCZOS).save(icon,"PNG")
           app={"appName":"Stagepulse Ses Merkezi","packageName":"com.stagepulse.sesmerkezi",
-               "versionName":version}
+               "versionName":version,"updateDesc":f"Stagepulse {version} update"}
           if os.environ.get("XIAOMI_APP_CATEGORY_ID"):
               app["category"]=int(os.environ["XIAOMI_APP_CATEGORY_ID"])
           request_data=json.dumps({"userName":os.environ["XIAOMI_USERNAME"],
