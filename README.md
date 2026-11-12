@@ -46,3 +46,12 @@ Kaynak repo `Stagepulse-Ses-Merkezi` Private yapıldığında bu salt-okunur tok
 
 Kararlı sürüm yayımlandığında `latest.json` ve Supabase güncelleme servisi aynı sürümle güncellenir. Uygulamanın Hesap menüsündeki mevcut güncelleme kontrolü bu manifesti okur ve yeni sürüm bildirimi verir. Mağazalara yükleme incelemeye gönderilir; mağaza kullanıcılarına mağazanın kendi güncelleme bildirimi ancak ilgili mağaza sürümü onaylayıp yayımladıktan sonra gider. Bu iki bildirim kanalı birbirinden bağımsızdır.
 
+
+
+### Windows dağıtım modeli
+
+- Windows kullanıcılarına doğrudan yalnızca kurulum EXE'si dağıtılır.
+- MSIX yalnızca Microsoft Store'a gönderilecek paket olarak üretilir; kullanıcıya doğrudan indirme paketi olarak sunulmaz.
+- Microsoft Store gönderim paketi Store kimliği ve Publisher değeriyle doğrulanır. Store paketi için Stagepulse PFX kod imzalama secret'ı gerekmez; Store imzalama süreci mağaza tarafında yürütülür.
+- `latest.json` doğrudan Windows güncellemesi için EXE bağlantısını sunar; MSIX indirme bağlantısı içermez.
+- `MSIX_SIGNING_PFX_BASE64` ve `MSIX_SIGNING_PFX_PASSWORD` secret'ları bu yayın akışı için gerekli değildir.
