@@ -27,7 +27,7 @@ permissions:
 
 concurrency:
   group: ses-merkezi-release-pipeline
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build-windows:
@@ -42,7 +42,7 @@ jobs:
       UPDATE_CHANNEL: stable
     steps:
       - name: Özel kaynak kodunu salt-okunur token ile al
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ibrahimFOH/Stagepulse-Ses-Merkezi
           ref: ${{ github.event.client_payload.source_ref || github.event.inputs.source_ref || (github.event_name == 'push' && 'main') }}
@@ -85,7 +85,7 @@ jobs:
           Add-Content -Path $env:GITHUB_OUTPUT -Value "release_version=$version" -Encoding utf8
           Write-Host "SOURCE_RELEASE_VERSION=$version"
       - name: Python 3.11 x64 kur
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5
         with:
           python-version: "3.11"
           architecture: x64
@@ -184,7 +184,7 @@ jobs:
           Write-Host "MSIX_INSTALL_REMOVE_OK $package" -ForegroundColor Green
 
       - name: Windows dağıtım dosyalarını sakla
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: release-windows
           path: release-assets/*
@@ -192,7 +192,7 @@ jobs:
           retention-days: 7
 
   build-android:
-    name: Kalıcı anahtarla imzalı Android APK
+    name: Kalıcı anahtarla imzalı Android APK ve AAB
     runs-on: ubuntu-latest
     timeout-minutes: 50
     outputs:
@@ -207,7 +207,7 @@ jobs:
       ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
     steps:
       - name: Özel kaynak kodunu salt-okunur token ile al
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ibrahimFOH/Stagepulse-Ses-Merkezi
           ref: ${{ github.event.client_payload.source_ref || github.event.inputs.source_ref || (github.event_name == 'push' && 'main') }}
@@ -263,7 +263,7 @@ jobs:
           PY
           python3 source/android/scripts/verify_assets.py
       - name: Android JavaScript ve ortak araç regresyon testlerini çalıştır
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "22"
       - name: Android JavaScript doğrulaması
@@ -279,7 +279,7 @@ jobs:
           node source/windows/tests/test_first_party_tools.js
 
       - name: Java 17 kur
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@dded0888837ed1f317902acf8a20df0ad188d165 # v5
         with:
           distribution: temurin
           java-version: "17"
@@ -314,7 +314,7 @@ jobs:
           gradle-version: "8.13"
 
       - name: İmzalı Android Release APK derle
-        run: gradle -p source/android --no-daemon clean testDebugUnitTest assembleRelease --stacktrace
+        run: gradle -p source/android --no-daemon clean testDebugUnitTest assembleRelease bundleRelease --stacktrace
 
       - name: İmza, sürüm, hizalama ve SHA-256 doğrula
         shell: bash
@@ -370,9 +370,17 @@ jobs:
           HASH="$(sha256sum "release-assets/$NAME" | awk '{print $1}')"
           printf '%s  %s\n' "$HASH" "$NAME" > "release-assets/$NAME.sha256"
           echo "Android SHA-256: $HASH"
+          AAB="source/android/app/build/outputs/bundle/release/app-release.aab"
+          test -s "$AAB"
+          jarsigner -verify -strict "$AAB" >/dev/null
+          AAB_NAME="Stagepulse-Ses-Merkezi-Android-$RELEASE_VERSION.aab"
+          cp "$AAB" "release-assets/$AAB_NAME"
+          AAB_HASH="$(sha256sum "release-assets/$AAB_NAME" | awk '{print $1}')"
+          printf '%s  %s\n' "$AAB_HASH" "$AAB_NAME" > "release-assets/$AAB_NAME.sha256"
+          echo "Android AAB SHA-256: $AAB_HASH"
 
       - name: Android dağıtım dosyalarını sakla
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: release-android
           path: release-assets/*
@@ -400,13 +408,13 @@ jobs:
           echo "PLATFORM_SOURCE_VERSIONS_MATCH $WINDOWS_RELEASE_VERSION"
 
       - name: Windows dağıtım dosyalarını al
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v4
         with:
           name: release-windows
           path: release-assets
 
       - name: Android dağıtım dosyalarını al
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v4
         with:
           name: release-android
           path: release-assets
@@ -421,6 +429,7 @@ jobs:
           files=(
             "Stagepulse-Ses-Merkezi-Windows-$RELEASE_VERSION.exe"
             "Stagepulse-Ses-Merkezi-Android-$RELEASE_VERSION.apk"
+            "Stagepulse-Ses-Merkezi-Android-$RELEASE_VERSION.aab"
           )
           if [[ "$MSIX_ENABLED" == "true" ]]; then
             files+=("Stagepulse-Ses-Merkezi-MSIX-$RELEASE_VERSION.msix")
@@ -448,6 +457,7 @@ jobs:
           specs={
             "windows":f"Stagepulse-Ses-Merkezi-Windows-{version}.exe",
             "android":f"Stagepulse-Ses-Merkezi-Android-{version}.apk",
+            "android_aab":f"Stagepulse-Ses-Merkezi-Android-{version}.aab",
           }
           items={}
           for key,name in specs.items():
@@ -536,8 +546,8 @@ jobs:
           # Eski varlıkları aynı adlarla güvenli biçimde yenile.
           mapfile -t release_files < <(find release-assets -maxdepth 1 -type f -print | sort)
           release_files+=("latest.json")
-          expected_count=5
-          if [[ "$MSIX_ENABLED" == "true" ]]; then expected_count=8; fi
+          expected_count=7
+          if [[ "$MSIX_ENABLED" == "true" ]]; then expected_count=10; fi
           if [[ ${#release_files[@]} -ne $expected_count ]]; then
             echo "::error::Dağıtım dosyası sayısı beklenen $expected_count değil."
             printf 'Bulunan dosyalar: %s\n' "${release_files[@]}"
@@ -566,6 +576,8 @@ jobs:
             "Stagepulse-Ses-Merkezi-Windows-$RELEASE_VERSION.exe.sha256"
             "Stagepulse-Ses-Merkezi-Android-$RELEASE_VERSION.apk"
             "Stagepulse-Ses-Merkezi-Android-$RELEASE_VERSION.apk.sha256"
+            "Stagepulse-Ses-Merkezi-Android-$RELEASE_VERSION.aab"
+            "Stagepulse-Ses-Merkezi-Android-$RELEASE_VERSION.aab.sha256"
             "latest.json"
           )
           if [[ "$MSIX_ENABLED" == "true" ]]; then
@@ -584,7 +596,7 @@ jobs:
           gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" >/dev/null
           echo "RELEASE_PUBLISHED_OK $tag channel=$UPDATE_CHANNEL release_id=$release_id"
       - name: Güncel manifest deposunu ana dala al
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: main
           path: update-index
@@ -607,7 +619,7 @@ jobs:
               raise SystemExit("Yayımlanacak manifest sürümü veya yayın durumu geçersiz.")
           if candidate.get("channel") != "stable" or candidate.get("prerelease") is not False:
               raise SystemExit("Manifest yalnızca kararlı kanal olarak yayımlanabilir.")
-          for key in ("windows", "android"):
+          for key in ("windows", "android", "android_aab"):
               item = candidate.get(key)
               if not isinstance(item, dict) or not re.fullmatch(r"[a-f0-9]{64}", str(item.get("sha256", ""))):
                   raise SystemExit(f"{key} dağıtım kaydı veya SHA-256 eksik.")
