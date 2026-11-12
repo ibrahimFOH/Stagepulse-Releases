@@ -773,7 +773,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ibrahimFOH/Stagepulse-Ses-Merkezi
-          ref: main
+          ref: ${{ github.event.client_payload.source_ref || github.event.inputs.source_ref || 'main' }}
           token: ${{ secrets.SOURCE_REPO_READ_TOKEN }}
           path: source
           sparse-checkout: windows/ui/assets/stagepulse-icon-256.png
