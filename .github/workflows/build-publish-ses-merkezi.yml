@@ -31,7 +31,7 @@ concurrency:
 
 jobs:
   build-windows:
-    name: Windows kurulum EXE ve kaynak doğrulaması
+    name: Windows EXE ve Store MSIX üretimi
     runs-on: windows-latest
     timeout-minutes: 60
     outputs:
@@ -144,6 +144,23 @@ jobs:
           Set-Content -LiteralPath "$target.sha256" -Value "$hash  $name" -Encoding ascii -NoNewline
           if ((Get-Item -LiteralPath $target).Length -lt 1000000) { throw "Windows kurulum paketi beklenenden küçük." }
           Write-Host "Windows SHA-256: $hash"
+
+      - name: Microsoft Store için imzasız MSIX üret ve doğrula
+        shell: pwsh
+        run: |
+          $outputPath = Join-Path $env:GITHUB_WORKSPACE 'release-assets'
+          $payloadPath = Join-Path $env:GITHUB_WORKSPACE 'source\\windows\\build\\payload\\StagepulseSesMerkezi'
+          & source/windows/MSIX_OLUSTUR.ps1 -PayloadPath $payloadPath -OutputDirectory $outputPath -StoreSubmission
+          if ($LASTEXITCODE -ne 0) { throw "Store MSIX üretimi başarısız oldu: $LASTEXITCODE" }
+          $package = Join-Path $outputPath "Stagepulse-Ses-Merkezi-Store-$env:RELEASE_VERSION.msix"
+          $checksum = "$package.sha256"
+          if (-not (Test-Path -LiteralPath $package)) { throw "Store MSIX bulunamadı: $package" }
+          if ((Get-Item -LiteralPath $package).Length -lt 1000000) { throw "Store MSIX paketi beklenenden küçük." }
+          if (-not (Test-Path -LiteralPath $checksum)) { throw "Store MSIX SHA-256 dosyası bulunamadı." }
+          $expected = ((Get-Content -LiteralPath $checksum -Raw).Trim() -split '\\s+')[0].ToLowerInvariant()
+          $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $package).Hash.ToLowerInvariant()
+          if ($expected -ne $actual) { throw "Store MSIX SHA-256 doğrulaması başarısız." }
+          Write-Host "STORE_MSIX_BUILD_VERIFY_OK $package" -ForegroundColor Green
 
       - name: İmzalı MSIX paketini oluştur (kalıcı sertifika tanımlıysa)
         id: msix_signing
@@ -388,7 +405,7 @@ jobs:
           retention-days: 7
 
   publish:
-    name: İki platformu doğrula ve ilgili kanalda yayımla
+    name: Dört paketi doğrula ve ilgili kanalda yayımla
     needs: [build-windows, build-android]
     runs-on: ubuntu-latest
     env:
@@ -514,7 +531,7 @@ jobs:
           release_title="Stagepulse Ses Merkezi $RELEASE_VERSION"
           release_body="Stagepulse Ses Merkezi $RELEASE_VERSION kararlı sürümüdür.
 
-          Windows kurulum EXE ve kalıcı sertifikayla imzalı Android APK birlikte yayımlandı. Paketlerin SHA-256 özetleri doğrulandı."
+          Windows kurulum EXE, Microsoft Store gönderimine hazır MSIX, Android APK ve Galaxy Store gönderimine hazır AAB birlikte yayımlandı. Paketlerin SHA-256 özetleri doğrulandı."
           if [[ "$MSIX_ENABLED" == "true" ]]; then
             release_body+=" Windows MSIX paketi de yayımlandı. İlk kurulumda Stagepulse MSIX sertifikası güvenilir yayıncılar deposuna eklenmelidir."
           fi
@@ -546,8 +563,8 @@ jobs:
           # Eski varlıkları aynı adlarla güvenli biçimde yenile.
           mapfile -t release_files < <(find release-assets -maxdepth 1 -type f -print | sort)
           release_files+=("latest.json")
-          expected_count=7
-          if [[ "$MSIX_ENABLED" == "true" ]]; then expected_count=10; fi
+          expected_count=9
+          if [[ "$MSIX_ENABLED" == "true" ]]; then expected_count=12; fi
           if [[ ${#release_files[@]} -ne $expected_count ]]; then
             echo "::error::Dağıtım dosyası sayısı beklenen $expected_count değil."
             printf 'Bulunan dosyalar: %s\n' "${release_files[@]}"
@@ -578,6 +595,8 @@ jobs:
             "Stagepulse-Ses-Merkezi-Android-$RELEASE_VERSION.apk.sha256"
             "Stagepulse-Ses-Merkezi-Android-$RELEASE_VERSION.aab"
             "Stagepulse-Ses-Merkezi-Android-$RELEASE_VERSION.aab.sha256"
+            "Stagepulse-Ses-Merkezi-Store-$RELEASE_VERSION.msix"
+            "Stagepulse-Ses-Merkezi-Store-$RELEASE_VERSION.msix.sha256"
             "latest.json"
           )
           if [[ "$MSIX_ENABLED" == "true" ]]; then
