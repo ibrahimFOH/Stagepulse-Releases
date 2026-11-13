@@ -6,30 +6,30 @@
   "versionCode": 40005,
   "windows": {
     "url": "https://github.com/ibrahimFOH/Stagepulse-Releases/releases/download/v4.0.5/Stagepulse-Ses-Merkezi-Windows-4.0.5.exe",
-    "sha256": "16a51db104b4649a2e4c24ecdc5d388b8246b3e0ce7f562e307989458719eb4c",
+    "sha256": "11e9108ac5ed9ddef57292827b1278eb2be4ad37c7a58b79211c870620ec2b3f",
     "filename": "Stagepulse-Ses-Merkezi-Windows-4.0.5.exe"
   },
   "android": {
     "url": "https://github.com/ibrahimFOH/Stagepulse-Releases/releases/download/v4.0.5/Stagepulse-Ses-Merkezi-Android-4.0.5.apk",
-    "sha256": "8b4fd8c7fa88a5c4b14fba82c5a1f07bec25ce4dedd6c0ffe39d60fc4f4f8cec",
+    "sha256": "4f2946b77e0901b1ae7638b79888551d84767b4cdae5a160f5a9108b9860fa14",
     "filename": "Stagepulse-Ses-Merkezi-Android-4.0.5.apk"
   },
   "android_aab": {
     "url": "https://github.com/ibrahimFOH/Stagepulse-Releases/releases/download/v4.0.5/Stagepulse-Ses-Merkezi-Android-4.0.5.aab",
-    "sha256": "f8d0254506a57f4f90e50caaad54bad50bea8348bf35ff5116e11663518bcb93",
+    "sha256": "14eec5492ee939ba5180911e376bfbf8d79fe6fbbff9aece1d8087b25b5bb256",
     "filename": "Stagepulse-Ses-Merkezi-Android-4.0.5.aab"
   },
   "store_msix": {
     "url": "https://github.com/ibrahimFOH/Stagepulse-Releases/releases/download/v4.0.5/Stagepulse-Ses-Merkezi-Store-4.0.5.msix",
-    "sha256": "7084b902737dbd91dc59ff08b126083961614e5dde6512596ae0d598abaf0ea4",
+    "sha256": "92e176450c8057b28f0263719e4fc20e28f152b06e8b4c7f22cf787ce07791f3",
     "filename": "Stagepulse-Ses-Merkezi-Store-4.0.5.msix",
     "signing": "microsoft-store"
   },
   "url": "https://github.com/ibrahimFOH/Stagepulse-Releases/releases/download/v4.0.5/Stagepulse-Ses-Merkezi-Windows-4.0.5.exe",
-  "sha256": "16a51db104b4649a2e4c24ecdc5d388b8246b3e0ce7f562e307989458719eb4c",
+  "sha256": "11e9108ac5ed9ddef57292827b1278eb2be4ad37c7a58b79211c870620ec2b3f",
   "filename": "Stagepulse-Ses-Merkezi-Windows-4.0.5.exe",
   "apkUrl": "https://github.com/ibrahimFOH/Stagepulse-Releases/releases/download/v4.0.5/Stagepulse-Ses-Merkezi-Android-4.0.5.apk",
-  "apkSha256": "8b4fd8c7fa88a5c4b14fba82c5a1f07bec25ce4dedd6c0ffe39d60fc4f4f8cec",
+  "apkSha256": "4f2946b77e0901b1ae7638b79888551d84767b4cdae5a160f5a9108b9860fa14",
   "notes": "Stagepulse Ses Merkezi 4.0.5 kararlı sürümü.",
   "channel": "stable",
   "prerelease": false,
