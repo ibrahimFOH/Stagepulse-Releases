@@ -6,12 +6,12 @@
   "versionCode": 40006,
   "windows": {
     "url": "https://github.com/ibrahimFOH/Stagepulse-Releases/releases/download/v4.0.6/Stagepulse-Ses-Merkezi-Windows-4.0.6.exe",
-    "sha256": "3be8234c86c31863d5db8311940fece442ea7bb67e34dd6e2065be44eb40f004",
+    "sha256": "a070af5906cda027ef62923c769cb285dcaedeaf58ccea276bec3085fb62b727",
     "filename": "Stagepulse-Ses-Merkezi-Windows-4.0.6.exe"
   },
   "android": {
     "url": "https://github.com/ibrahimFOH/Stagepulse-Releases/releases/download/v4.0.6/Stagepulse-Ses-Merkezi-Android-4.0.6.apk",
-    "sha256": "b41dc440e09e0ee9c974fbef12a069f1d56ec39269146f517edcc27cbb12b4ab",
+    "sha256": "46b72a19a02aaea8864236c9489d3d1adc57187e1366eede125130d87fef1f4f",
     "filename": "Stagepulse-Ses-Merkezi-Android-4.0.6.apk"
   },
   "android_aab": {
@@ -21,15 +21,15 @@
   },
   "store_msix": {
     "url": "https://github.com/ibrahimFOH/Stagepulse-Releases/releases/download/v4.0.6/Stagepulse-Ses-Merkezi-Store-4.0.6.msix",
-    "sha256": "47d42e08fe1c6ae392a38da65fb334d8426ed1b40615af282a1299ec34c2465e",
+    "sha256": "691e104fea32c17f059af773d4d54132400e77e58c8524cf16bc30420856164e",
     "filename": "Stagepulse-Ses-Merkezi-Store-4.0.6.msix",
     "signing": "microsoft-store"
   },
   "url": "https://github.com/ibrahimFOH/Stagepulse-Releases/releases/download/v4.0.6/Stagepulse-Ses-Merkezi-Windows-4.0.6.exe",
-  "sha256": "3be8234c86c31863d5db8311940fece442ea7bb67e34dd6e2065be44eb40f004",
+  "sha256": "a070af5906cda027ef62923c769cb285dcaedeaf58ccea276bec3085fb62b727",
   "filename": "Stagepulse-Ses-Merkezi-Windows-4.0.6.exe",
   "apkUrl": "https://github.com/ibrahimFOH/Stagepulse-Releases/releases/download/v4.0.6/Stagepulse-Ses-Merkezi-Android-4.0.6.apk",
-  "apkSha256": "b41dc440e09e0ee9c974fbef12a069f1d56ec39269146f517edcc27cbb12b4ab",
+  "apkSha256": "46b72a19a02aaea8864236c9489d3d1adc57187e1366eede125130d87fef1f4f",
   "notes": "Stagepulse Ses Merkezi 4.0.6 kararlı sürümü.",
   "channel": "stable",
   "prerelease": false,
