@@ -26,7 +26,9 @@ permissions:
   contents: write
 
 concurrency:
-  group: ses-merkezi-release-pipeline
+  # Eski bir sürümün uzun Windows derlemesi yeni kararlı sürümü bloke etmesin.
+  # Aynı sürümün yinelenen tetiklemeleri kendi aralarında sıralı kalır.
+  group: ses-merkezi-release-pipeline-${{ github.event.client_payload.release_version || github.event.inputs.release_version || 'stable' }}
   cancel-in-progress: false
   queue: max
 
