@@ -1,37 +1,37 @@
 {
   "ok": true,
   "published": true,
-  "version": "4.1.2",
-  "versionName": "4.1.2",
-  "versionCode": 40102,
+  "version": "4.1.3",
+  "versionName": "4.1.3",
+  "versionCode": 40103,
   "windows": {
-    "url": "https://github.com/ibrahimFOH/Stagepulse-Releases/releases/download/v4.1.2/Stagepulse-Ses-Merkezi-Windows-4.1.2.exe",
-    "sha256": "86587db419420531c50de3254e88af608a4e407b1d11cda08290b2ed1e176e2f",
-    "filename": "Stagepulse-Ses-Merkezi-Windows-4.1.2.exe"
+    "url": "https://github.com/ibrahimFOH/Stagepulse-Releases/releases/download/v4.1.3/Stagepulse-Ses-Merkezi-Windows-4.1.3.exe",
+    "sha256": "5f8aa9ca4b64fe0b6d1f735f9d9b3daedcbeb3e7e9f6908e42e58a09d098ad98",
+    "filename": "Stagepulse-Ses-Merkezi-Windows-4.1.3.exe"
   },
   "android": {
-    "url": "https://github.com/ibrahimFOH/Stagepulse-Releases/releases/download/v4.1.2/Stagepulse-Ses-Merkezi-Android-4.1.2.apk",
-    "sha256": "f637c9fc4d5e0477b3b9df99573315dfff042816e9bce49f328f3c6819909156",
-    "filename": "Stagepulse-Ses-Merkezi-Android-4.1.2.apk"
+    "url": "https://github.com/ibrahimFOH/Stagepulse-Releases/releases/download/v4.1.3/Stagepulse-Ses-Merkezi-Android-4.1.3.apk",
+    "sha256": "5fd6a25bac0cfdc731c932cbb4402b88c5433e4eaf1451a19db0a094e1934a81",
+    "filename": "Stagepulse-Ses-Merkezi-Android-4.1.3.apk"
   },
   "android_aab": {
-    "url": "https://github.com/ibrahimFOH/Stagepulse-Releases/releases/download/v4.1.2/Stagepulse-Ses-Merkezi-Android-4.1.2.aab",
-    "sha256": "49b385fc483e8ad59f6f31264c074a1c0482376b6a00da6a44bc3946bcd68b19",
-    "filename": "Stagepulse-Ses-Merkezi-Android-4.1.2.aab"
+    "url": "https://github.com/ibrahimFOH/Stagepulse-Releases/releases/download/v4.1.3/Stagepulse-Ses-Merkezi-Android-4.1.3.aab",
+    "sha256": "5c762122544f2eb7c3180494a8c7138684a7d7f6be0ffc1aeb729cfd83b083c2",
+    "filename": "Stagepulse-Ses-Merkezi-Android-4.1.3.aab"
   },
   "store_msix": {
-    "url": "https://github.com/ibrahimFOH/Stagepulse-Releases/releases/download/v4.1.2/Stagepulse-Ses-Merkezi-Store-4.1.2.msix",
-    "sha256": "b16527a348050f04145a5ac5541347b6c36694e140f2ec6243ef3591d397b805",
-    "filename": "Stagepulse-Ses-Merkezi-Store-4.1.2.msix",
+    "url": "https://github.com/ibrahimFOH/Stagepulse-Releases/releases/download/v4.1.3/Stagepulse-Ses-Merkezi-Store-4.1.3.msix",
+    "sha256": "2f6a062314df1a589ee42ac40f822f52b6f8d05df7cb3b4388a169ba667047d2",
+    "filename": "Stagepulse-Ses-Merkezi-Store-4.1.3.msix",
     "signing": "microsoft-store"
   },
-  "url": "https://github.com/ibrahimFOH/Stagepulse-Releases/releases/download/v4.1.2/Stagepulse-Ses-Merkezi-Windows-4.1.2.exe",
-  "sha256": "86587db419420531c50de3254e88af608a4e407b1d11cda08290b2ed1e176e2f",
-  "filename": "Stagepulse-Ses-Merkezi-Windows-4.1.2.exe",
-  "apkUrl": "https://github.com/ibrahimFOH/Stagepulse-Releases/releases/download/v4.1.2/Stagepulse-Ses-Merkezi-Android-4.1.2.apk",
-  "apkSha256": "f637c9fc4d5e0477b3b9df99573315dfff042816e9bce49f328f3c6819909156",
-  "notes": "Stagepulse Ses Merkezi 4.1.2 kararlı sürümü.",
+  "url": "https://github.com/ibrahimFOH/Stagepulse-Releases/releases/download/v4.1.3/Stagepulse-Ses-Merkezi-Windows-4.1.3.exe",
+  "sha256": "5f8aa9ca4b64fe0b6d1f735f9d9b3daedcbeb3e7e9f6908e42e58a09d098ad98",
+  "filename": "Stagepulse-Ses-Merkezi-Windows-4.1.3.exe",
+  "apkUrl": "https://github.com/ibrahimFOH/Stagepulse-Releases/releases/download/v4.1.3/Stagepulse-Ses-Merkezi-Android-4.1.3.apk",
+  "apkSha256": "5fd6a25bac0cfdc731c932cbb4402b88c5433e4eaf1451a19db0a094e1934a81",
+  "notes": "Stagepulse Ses Merkezi 4.1.3 kararlı sürümü.",
   "channel": "stable",
   "prerelease": false,
-  "release_url": "https://github.com/ibrahimFOH/Stagepulse-Releases/releases/tag/v4.1.2"
+  "release_url": "https://github.com/ibrahimFOH/Stagepulse-Releases/releases/tag/v4.1.3"
 }
